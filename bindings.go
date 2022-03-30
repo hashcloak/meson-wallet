@@ -30,8 +30,8 @@ func Register(configFile *C.char) {
 	goConfig = cfg
 }
 
-//export NewFromConfig
-func NewFromConfig(service *C.char) {
+//export NewClient
+func NewClient(service *C.char) {
 	c, err := client.NewFromConfig(goConfig, C.GoString(service))
 	if err != nil {
 		panic(err)
