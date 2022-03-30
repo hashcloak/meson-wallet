@@ -11,11 +11,11 @@ import (
 	"github.com/katzenpost/core/crypto/ecdh"
 )
 
-var myConfig *config.Config
-var myClient *client.Client
-var mySession *client.Session
-var myLinkKey *ecdh.PrivateKey
-var myService *utils.ServiceDescriptor
+var goConfig *config.Config
+var goClient *client.Client
+var goSession *client.Session
+var goLinkKey *ecdh.PrivateKey
+var goService *utils.ServiceDescriptor
 
 //export Register
 func Register(configFile *C.char) {
@@ -26,41 +26,41 @@ func Register(configFile *C.char) {
 	}
 	_ = cfg.UpdateTrust()
 	_ = cfg.SaveConfig(gConfigFile)
-	myLinkKey = client.AutoRegisterRandomClient(cfg)
-	myConfig = cfg
+	goLinkKey = client.AutoRegisterRandomClient(cfg)
+	goConfig = cfg
 }
 
 //export NewFromConfig
 func NewFromConfig(service *C.char) {
-	c, err := client.NewFromConfig(myConfig, C.GoString(service))
+	c, err := client.NewFromConfig(goConfig, C.GoString(service))
 	if err != nil {
 		panic(err)
 	}
-	myClient = c
+	goClient = c
 }
 
 //export NewSession
 func NewSession() {
-	s, err := myClient.NewSession(myLinkKey)
+	s, err := goClient.NewSession(goLinkKey)
 	if err != nil {
 		panic(err)
 	}
-	mySession = s
+	goSession = s
 }
 
 //export GetService
 func GetService(service *C.char) {
-	serviceDesc, err := mySession.GetService(C.GoString(service))
+	serviceDesc, err := goSession.GetService(C.GoString(service))
 	if err != nil {
 		panic(err)
 	}
-	myService = serviceDesc
+	goService = serviceDesc
 }
 
 //export BlockingSendUnreliableMessage
 func BlockingSendUnreliableMessage(messagePtr unsafe.Pointer, messageLen C.int) unsafe.Pointer {
 	message := C.GoBytes(messagePtr, messageLen)
-	resp, err := mySession.BlockingSendUnreliableMessage(myService.Name, myService.Provider, message)
+	resp, err := goSession.BlockingSendUnreliableMessage(goService.Name, goService.Provider, message)
 	if err != nil {
 		panic(err)
 	}
@@ -69,7 +69,7 @@ func BlockingSendUnreliableMessage(messagePtr unsafe.Pointer, messageLen C.int) 
 
 //export Shutdown
 func Shutdown() {
-	myClient.Shutdown()
+	goClient.Shutdown()
 }
 
 //export ValidateReply
