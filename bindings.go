@@ -71,6 +71,20 @@ func BlockingSendUnreliableMessage(messagePtr unsafe.Pointer, messageLen C.int) 
 	return result, C.size_t(len(resp)) //need to send the length of char array
 }
 
+//export SendUnreliableMessage
+func SendUnreliableMessage(messagePtr unsafe.Pointer, messageLen C.int) (*C.char, C.size_t) {
+	message := C.GoBytes(messagePtr, messageLen)
+	fmt.Printf("Sending Sphinx packet payload to: %s@%s\n", goService.Name, goService.Provider)
+	msgID, err := goSession.SendUnreliableMessage(goService.Name, goService.Provider, message)
+	if err != nil {
+		panic(err)
+	}
+	cb_msgID := C.CBytes(msgID[:])
+	result := (*C.char)(cb_msgID)
+	return result, C.size_t(len(msgID)) //need to send the length of char array
+
+}
+
 //export Shutdown
 func Shutdown() {
 	goClient.Shutdown()

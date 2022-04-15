@@ -15,7 +15,6 @@ int main(int argc, char *argv[]) {
   NewSession();
   GetService("echo");
   struct BlockingSendUnreliableMessage_return r = BlockingSendUnreliableMessage(message, strlen(message));
-  
   printf("packet_len: %zu \n",r.r1);
   for ( i = 0; i < r.r1; i++ )
     {
