@@ -3,6 +3,7 @@ package main
 import "C"
 
 import (
+	"fmt"
 	"unsafe"
 
 	client "github.com/hashcloak/Meson-client"
@@ -58,13 +59,16 @@ func GetService(service *C.char) {
 }
 
 //export BlockingSendUnreliableMessage
-func BlockingSendUnreliableMessage(messagePtr unsafe.Pointer, messageLen C.int) unsafe.Pointer {
+func BlockingSendUnreliableMessage(messagePtr unsafe.Pointer, messageLen C.int) (*C.char, C.size_t) {
 	message := C.GoBytes(messagePtr, messageLen)
+	fmt.Printf("Sending Sphinx packet payload to: %s@%s\n", goService.Name, goService.Provider)
 	resp, err := goSession.BlockingSendUnreliableMessage(goService.Name, goService.Provider, message)
 	if err != nil {
 		panic(err)
 	}
-	return C.CBytes(resp)
+	cb_resp := C.CBytes(resp)
+	result := (*C.char)(cb_resp)
+	return result, C.size_t(len(resp)) //need to send the length of char array
 }
 
 //export Shutdown
