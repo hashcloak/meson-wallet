@@ -1,11 +1,47 @@
 #![allow(non_upper_case_globals)]
 #![allow(non_camel_case_types)]
 #![allow(non_snake_case)]
+use aes::cipher::{KeyIvInit, StreamCipher, StreamCipherSeek};
+use base64ct::{Base64, Encoding};
 use ethers::prelude::{k256::ecdsa::SigningKey, *};
-use ethers::signers::coins_bip39::English;
-use futures::executor::block_on;
+use ethers::signers::coins_bip39::{English, Mnemonic};
+use rand::{CryptoRng, Rng};
+use scrypt::{scrypt, Params as ScryptParams};
+use serde::{Deserialize, Serialize};
+use sha3::{Digest, Keccak256};
+use std::error::Error;
 use std::ffi::{c_void, CString};
+use std::fs;
+use std::path::{Path, PathBuf};
+use tempdir::TempDir;
+
+mod error;
+use error::MnemonicError;
 include!("../bindings.rs");
+
+type Aes128Ctr = ctr::Ctr64LE<aes::Aes128>;
+
+const DEFAULT_KEY_SIZE: usize = 32usize;
+const DEFAULT_IV_SIZE: usize = 16usize;
+const DEFAULT_KDF_PARAMS_DKLEN: u8 = 32u8;
+const DEFAULT_KDF_PARAMS_LOG_N: u8 = 13u8;
+const DEFAULT_KDF_PARAMS_R: u32 = 8u32;
+const DEFAULT_KDF_PARAMS_P: u32 = 1u32;
+
+struct MesonWallet {
+    config: meson_config,
+    path: Path,
+}
+
+#[derive(Serialize, Deserialize)]
+struct JsonMnemonic {
+    mnemonic: String,
+    mac: String,
+    salt: String,
+    iv: String,
+}
+
+struct meson_config {}
 
 async fn create_signed_tx(
     wallet: &Wallet<SigningKey>,
@@ -29,15 +65,124 @@ async fn create_signed_tx(
     Ok(rlp_tx)
 }
 
-fn build_wallet_from_mnemonic(phrase: &str, index: u32) -> Result<Wallet<SigningKey>, WalletError> {
-    let wallet = MnemonicBuilder::<English>::default()
+fn gen_keypair_from_mnemonic(phrase: &str, index: u32) -> Result<Wallet<SigningKey>, WalletError> {
+    let keypair = MnemonicBuilder::<English>::default()
         .phrase(phrase)
         .index(index)?
         .build()?;
-    Ok(wallet)
+    Ok(keypair)
 }
 
-// fn through_meson( tx: Byte,)
+impl MesonWallet {
+    pub fn new(password: &str, path: PathBuf) -> Result<(), Box<dyn Error>> {
+        let mut rng = rand::thread_rng();
+        let phrase = Mnemonic::<English>::new_with_count(&mut rng, 12)?;
+        //emcrypt
+        fs::write::<PathBuf, String>(path.join("mnemonic"), phrase.to_phrase().unwrap())
+            .expect("Unable to write file");
+        // let wallet = MnemonicBuilder::<English>::default()
+        //     .phrase(phrase)
+        //     .index(index)?
+        //     // Use this if your mnemonic is encrypted
+        //     .write_to(path)
+        //     .build()?;
+        Ok(())
+    }
+}
+
+fn encrypt_mnemonic<P, R, S>(
+    dir: P,
+    rng: &mut R,
+    mnemonic: String,
+    password: S,
+) -> Result<(), MnemonicError>
+where
+    P: AsRef<Path>,
+    R: Rng + CryptoRng,
+    S: AsRef<[u8]>,
+{
+    // Generate a random salt.
+    let mut salt = vec![0u8; DEFAULT_KEY_SIZE];
+    rng.fill_bytes(salt.as_mut_slice());
+
+    // Key Derivation with scrypt.
+    let mut key = vec![0u8; DEFAULT_KDF_PARAMS_DKLEN as usize];
+    let scrypt_params = ScryptParams::new(
+        DEFAULT_KDF_PARAMS_LOG_N,
+        DEFAULT_KDF_PARAMS_R,
+        DEFAULT_KDF_PARAMS_P,
+    )?;
+    scrypt(password.as_ref(), &salt, &scrypt_params, key.as_mut_slice())?;
+
+    // Encrypt the private key using AES-128-CTR.
+    let mut iv = vec![0u8; DEFAULT_IV_SIZE];
+    rng.fill_bytes(iv.as_mut_slice());
+    let mut ciphertext = mnemonic.into_bytes();
+    let mut encrypter = Aes128Ctr::new((&key[..16]).into(), (&iv[..16]).into());
+    encrypter.apply_keystream(&mut ciphertext);
+
+    // Calculate the MAC.
+    let mac = Keccak256::new()
+        .chain_update(&key[16..32])
+        .chain_update(&ciphertext)
+        .finalize();
+    let mac = Base64::encode_string(&mac);
+    let salt = Base64::encode_string(&salt);
+    let iv = Base64::encode_string(&iv);
+
+    //store the encrypted mnemonic
+    let enc_mac = JsonMnemonic {
+        mnemonic: Base64::encode_string(&ciphertext),
+        mac: mac,
+        salt: salt,
+        iv: iv,
+    };
+    let str_json = serde_json::to_string(&enc_mac)?;
+    fs::write::<PathBuf, String>(dir.as_ref().join("mnemonic"), str_json)
+        .expect("Unable to write file");
+
+    // println!("cipher {:?}, mac {:?}", ciphertext, mac);
+    Ok(())
+}
+
+fn decrypt_mnemonic<P, S>(dir: P, password: S) -> Result<String, MnemonicError>
+where
+    P: AsRef<Path>,
+    S: AsRef<[u8]>,
+{
+    let str_json = fs::read_to_string(dir.as_ref().join("mnemonic"))?;
+    let json_mnemonic: JsonMnemonic = serde_json::from_str(&str_json)?;
+    let mut cipher_mnemonic = Base64::decode_vec(&json_mnemonic.mnemonic)?;
+    let mac_from_json = json_mnemonic.mac;
+    let salt = Base64::decode_vec(&json_mnemonic.salt)?;
+    let iv = Base64::decode_vec(&json_mnemonic.iv)?;
+
+    //Derive the key
+    let mut key = vec![0u8; DEFAULT_KDF_PARAMS_DKLEN as usize];
+    let scrypt_params = ScryptParams::new(
+        DEFAULT_KDF_PARAMS_LOG_N,
+        DEFAULT_KDF_PARAMS_R,
+        DEFAULT_KDF_PARAMS_P,
+    )?;
+    scrypt(password.as_ref(), &salt, &scrypt_params, key.as_mut_slice())?;
+
+    //Derive and compare the mac
+    let mac = Keccak256::new()
+        .chain_update(&key[16..32])
+        .chain_update(&cipher_mnemonic)
+        .finalize();
+    let mac = Base64::encode_string(&mac);
+    if mac != mac_from_json {
+        return Err(MnemonicError::MacMismatch);
+    };
+
+    //Decrypt the mnemonic
+    let mut decryptor = Aes128Ctr::new((&key[..16]).into(), (&iv[..16]).into());
+    decryptor.apply_keystream(&mut cipher_mnemonic);
+    let mnemonic = std::str::from_utf8(&cipher_mnemonic)?.to_owned();
+
+    Ok(mnemonic)
+}
 
 pub fn ping() {
     let configFile = CString::new(
@@ -74,12 +219,12 @@ pub fn ping() {
 
 mod tests {
     use super::*;
-
+    use futures::executor::block_on;
     #[test]
-    fn mnemonic_build_no_password() {
+    fn mnemonic_build() {
         let phrase = "code black hollow banana kite betray rebuild collect fortune clean plug provide setup catch panic steel message code sudden example mechanic you donor diagram";
         let index = 0u32;
-        let wallet = build_wallet_from_mnemonic(phrase, index).unwrap();
+        let wallet = gen_keypair_from_mnemonic(phrase, index).unwrap();
         let wallet2: Wallet<SigningKey> =
             "2cd0fc69151afffe19e66db7e31ec34f1fbf10552983711faccba030025fc706"
                 .parse()
@@ -88,7 +233,7 @@ mod tests {
     }
 
     #[test]
-
+    //todo : create a better test
     fn create_tx() {
         let wallet: Wallet<SigningKey> =
             "2cd0fc69151afffe19e66db7e31ec34f1fbf10552983711faccba030025fc706"
@@ -108,5 +253,45 @@ mod tests {
         .unwrap();
 
         println!("{}", tx);
+    }
+
+    #[test]
+    fn test_new() {
+        MesonWallet::new("asda", PathBuf::from("./")).unwrap();
+    }
+
+    #[test]
+
+    fn test_enc_dec_mnemonic() {
+        let tmp_dir = TempDir::new("mne_test").unwrap();
+        let mnemonic1 =
+            "planet taxi snap future much climb wild fat clip assault ring torch".to_owned();
+        encrypt_mnemonic(
+            tmp_dir.path(),
+            &mut rand::thread_rng(),
+            mnemonic1.clone(),
+            "15wefgsze",
+        )
+        .unwrap();
+
+        let mnemonic2 = decrypt_mnemonic(tmp_dir.path(), "15wefgsze").unwrap();
+        assert_eq!(mnemonic1, mnemonic2);
+    }
+
+    #[test]
+    #[should_panic(expected = "MacMismatch")]
+    fn test_failed_dec_mnemonic() {
+        let tmp_dir = TempDir::new("mne_test").unwrap();
+        let mnemonic1 =
+            "planet taxi snap future much climb wild fat clip assault ring torch".to_owned();
+        encrypt_mnemonic(
+            tmp_dir.path(),
+            &mut rand::thread_rng(),
+            mnemonic1.clone(),
+            "15wefgsze",
+        )
+        .unwrap();
+
+        decrypt_mnemonic(tmp_dir.path(), "eroi43n2").unwrap();
     }
 }
