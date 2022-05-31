@@ -28,11 +28,13 @@ const DEFAULT_KDF_PARAMS_LOG_N: u8 = 13u8;
 const DEFAULT_KDF_PARAMS_R: u32 = 8u32;
 const DEFAULT_KDF_PARAMS_P: u32 = 1u32;
 
+//todo: what should be in the meson wallet
 struct MesonWallet {
     config: meson_config,
     path: Path,
 }
 
+//struct for encrypting mnemonic
 #[derive(Serialize, Deserialize)]
 struct JsonMnemonic {
     mnemonic: String,
@@ -41,8 +43,10 @@ struct JsonMnemonic {
     iv: String,
 }
 
+//todo: setup meson config
 struct meson_config {}
 
+//create a signed tx
 async fn create_signed_tx(
     wallet: &Wallet<SigningKey>,
     to: H160,
@@ -65,6 +69,7 @@ async fn create_signed_tx(
     Ok(rlp_tx)
 }
 
+//Derive keys from given mnemonic and index
 fn gen_keypair_from_mnemonic(phrase: &str, index: u32) -> Result<Wallet<SigningKey>, WalletError> {
     let keypair = MnemonicBuilder::<English>::default()
         .phrase(phrase)
@@ -90,6 +95,38 @@ impl MesonWallet {
     }
 }
 
+//encrypt a hex encoded private key with given password
+fn encrypt_sk<P, R, S>(
+    dir: P,
+    rng: &mut R,
+    sk: &str,
+    password: S,
+    name: Option<&str>,
+) -> Result<String, eth_keystore::KeystoreError>
+where
+    P: AsRef<Path>,
+    R: Rng + CryptoRng,
+    S: AsRef<[u8]>,
+{
+    let sk = ethers::utils::hex::decode(sk).unwrap();
+    let id = eth_keystore::encrypt_key(dir, rng, sk, password, name)?;
+    match name {
+        None => return Ok(id),
+        Some(name) => return Ok(name.to_owned()),
+    };
+}
+
+//decrypt a private key with given password
+fn decrypt_sk<P, S>(dir: P, password: S) -> Result<Wallet<SigningKey>, WalletError>
+where
+    P: AsRef<Path>,
+    S: AsRef<[u8]>,
+{
+    let wallet = Wallet::decrypt_keystore(dir, password)?;
+    Ok(wallet)
+}
+
+//encrypt a mnemonic String with password
 fn encrypt_mnemonic<P, R, S>(
     dir: P,
     rng: &mut R,
@@ -145,6 +182,7 @@ where
     Ok(())
 }
 
+//decrypt a mnemonic String with password
 fn decrypt_mnemonic<P, S>(dir: P, password: S) -> Result<String, MnemonicError>
 where
     P: AsRef<Path>,
@@ -218,6 +256,8 @@ pub fn ping() {
 #[cfg(test)]
 
 mod tests {
+    use std::str::FromStr;
+
     use super::*;
     use futures::executor::block_on;
     #[test]
@@ -293,5 +333,27 @@ mod tests {
         .unwrap();
 
         decrypt_mnemonic(tmp_dir.path(), "eroi43n2").unwrap();
+    }
+
+    #[test]
+
+    fn test_enc_dec_key() {
+        let tmp_dir = TempDir::new("key_test").unwrap();
+        let name = encrypt_sk(
+            tmp_dir.path(),
+            &mut rand::thread_rng(),
+            "2cd0fc69151afffe19e66db7e31ec34f1fbf10552983711faccba030025fc706",
+            "llkasd",
+            Some("00001"),
+        )
+        .unwrap();
+
+        let wallet = decrypt_sk(tmp_dir.path().join(name), "llkasd").unwrap();
+        let wallet2: Wallet<SigningKey> =
+            "2cd0fc69151afffe19e66db7e31ec34f1fbf10552983711faccba030025fc706"
+                .parse()
+                .unwrap();
+
+        assert_eq!(wallet, wallet2);
     }
 }
