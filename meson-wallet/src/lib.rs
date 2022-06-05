@@ -10,6 +10,7 @@ use scrypt::{scrypt, Params as ScryptParams};
 use serde::{Deserialize, Serialize};
 use sha3::{Digest, Keccak256};
 use std::error::Error;
+use std::ffi::CStr;
 use std::ffi::{c_void, CString};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -223,10 +224,7 @@ where
 }
 
 pub fn ping() {
-    let configFile = CString::new(
-        "/Users/liaoyuchen/Developer/hashcloak/meson/meson-wallet/examples/client.example.toml",
-    )
-    .expect("CString::new failed");
+    let configFile = CString::new("../client.example.toml").expect("CString::new failed");
     unsafe {
         println!("Register");
         Register(configFile.into_raw());
@@ -245,10 +243,58 @@ pub fn ping() {
                 .into_raw(),
         );
         let hello = String::from("hello");
+        println!("Sending: \"{}\"", hello);
         let chello = CString::new(hello).unwrap();
         let chello = chello.as_bytes_with_nul().as_ptr() as *mut c_void;
         let meson_return = BlockingSendUnreliableMessage(chello, 5);
-        println!("{}", *meson_return.r0 as u8 as char);
+        let slice_return = &*std::ptr::slice_from_raw_parts_mut(
+            meson_return.r0 as *mut u8,
+            meson_return.r1.try_into().unwrap(),
+        );
+
+        //todo: a better way to parse the packet
+        let packet_len: usize = slice_return[3].try_into().unwrap();
+        let packet_start: usize = 4;
+        let packet = &(slice_return[packet_start..packet_start + packet_len]);
+        let message = std::str::from_utf8(packet).unwrap();
+        println!("Got: {}", message);
+        Shutdown();
+
+        //todo: where to free the memory?
+        // let c_str = unsafe { CStr::from_ptr(meson_return) };
+        // let str_slice = c_str.to_str().unwrap();
+    }
+}
+pub fn ping_unblock() {
+    let configFile = CString::new("../client.example.toml").expect("CString::new failed");
+    unsafe {
+        println!("Register");
+        Register(configFile.into_raw());
+        println!("NewClient");
+        NewClient(
+            CString::new("echo")
+                .expect("CString::new failed")
+                .into_raw(),
+        );
+        println!("NewSession");
+        NewSession();
+        println!("GetService");
+        GetService(
+            CString::new("echo")
+                .expect("CString::new failed")
+                .into_raw(),
+        );
+        let hello = String::from("hello");
+        println!("Sending: \"{}\"", hello);
+        let chello = CString::new(hello).unwrap();
+        let chello = chello.as_bytes_with_nul().as_ptr() as *mut c_void;
+        let meson_return = SendUnreliableMessage(chello, 5);
+        let slice_return = &*std::ptr::slice_from_raw_parts_mut(
+            meson_return.r0 as *mut u8,
+            meson_return.r1.try_into().unwrap(),
+        );
+
+        println!("MsgID:{:?}", ethers::utils::hex::encode(slice_return));
         Shutdown();
     }
 }
@@ -301,7 +347,6 @@ mod tests {
     }
 
     #[test]
-
     fn test_enc_dec_mnemonic() {
         let tmp_dir = TempDir::new("mne_test").unwrap();
         let mnemonic1 =
@@ -336,7 +381,6 @@ mod tests {
     }
 
     #[test]
-
     fn test_enc_dec_key() {
         let tmp_dir = TempDir::new("key_test").unwrap();
         let name = encrypt_sk(

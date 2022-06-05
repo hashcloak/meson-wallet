@@ -26,11 +26,13 @@ struct Cli {
 }
 
 fn main() {
-    let cli = Cli::parse();
+    // let cli = Cli::parse();
 
-    if cli.new {
-        println!("Out file : {}", cli.out);
-    } else {
-        println!("Nothing");
-    }
+    // if cli.new {
+    //     println!("Out file : {}", cli.out);
+    // } else {
+    //     println!("Nothing");
+    // }
+    //meson_wallet::ping_unblock();
+    meson_wallet::ping();
 }

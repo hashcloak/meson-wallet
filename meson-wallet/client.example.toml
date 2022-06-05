@@ -1,0 +1,30 @@
+[Logging]
+  Disable = false
+  File = "/tmp/meson/ping/ping.log"
+  Level = "DEBUG"
+
+[UpstreamProxy]
+  Type = "none"
+  Network = ""
+  Address = ""
+  User = ""
+  Password = ""
+
+[Debug]
+  DisableDecoyTraffic = true
+  SessionDialTimeout = 1200000
+  InitialMaxPKIRetrievalDelay = 30
+  CaseSensitiveUserIdentifiers = false
+  PollingInterval = 100
+
+[Katzenmint]
+  ChainID = "katzenmint-chain-71DRoz"
+  PrimaryAddress = "tcp://127.0.0.1:21483"
+  WitnessesAddresses = ["127.0.0.1:21483"]
+  DatabaseName = "ping"
+  DatabaseDir = "/tmp/meson/ping/db"
+  RPCAddress = "tcp://127.0.0.1:21483"
+  [Katzenmint.TrustOptions]
+    Period = 600000000000
+    Height = 122
+    Hash = [93, 193, 56, 75, 243, 210, 208, 158, 0, 210, 18, 136, 199, 157, 163, 218, 140, 69, 51, 76, 89, 97, 99, 114, 48, 252, 211, 239, 166, 103, 88, 65]

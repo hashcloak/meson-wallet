@@ -171,8 +171,8 @@ extern "C" {
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct BlockingSendUnreliableMessage_return {
-    pub r0: *mut ::std::os::raw::c_char,
-    pub r1: size_t,
+    pub r0: *mut ::std::os::raw::c_void,
+    pub r1: GoInt32,
 }
 #[test]
 fn bindgen_test_layout_BlockingSendUnreliableMessage_return() {
@@ -226,8 +226,8 @@ extern "C" {
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct SendUnreliableMessage_return {
-    pub r0: *mut ::std::os::raw::c_char,
-    pub r1: size_t,
+    pub r0: *mut ::std::os::raw::c_void,
+    pub r1: GoInt32,
 }
 #[test]
 fn bindgen_test_layout_SendUnreliableMessage_return() {

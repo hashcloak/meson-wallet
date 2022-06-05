@@ -12,6 +12,7 @@ import (
 	"github.com/katzenpost/core/crypto/ecdh"
 )
 
+//todo: send the client, session... to rust so it can be reused.
 var goConfig *config.Config
 var goClient *client.Client
 var goSession *client.Session
@@ -59,30 +60,33 @@ func GetService(service *C.char) {
 }
 
 //export BlockingSendUnreliableMessage
-func BlockingSendUnreliableMessage(messagePtr unsafe.Pointer, messageLen C.int) (*C.char, C.size_t) {
+func BlockingSendUnreliableMessage(messagePtr unsafe.Pointer, messageLen C.int) (unsafe.Pointer, int32) {
 	message := C.GoBytes(messagePtr, messageLen)
 	fmt.Printf("Sending Sphinx packet payload to: %s@%s\n", goService.Name, goService.Provider)
 	resp, err := goSession.BlockingSendUnreliableMessage(goService.Name, goService.Provider, message)
 	if err != nil {
 		panic(err)
 	}
-	cb_resp := C.CBytes(resp)
-	result := (*C.char)(cb_resp)
-	return result, C.size_t(len(resp)) //need to send the length of char array
+	length := int32(len(resp))
+	c_resp := C.CBytes(resp[:])
+	return c_resp, length //sending the length of the packet for Rust
+
+	// for sending CString
+	// str_resp := string(resp[4:])
+	// cs_resp := C.CString(str_resp)
 }
 
 //export SendUnreliableMessage
-func SendUnreliableMessage(messagePtr unsafe.Pointer, messageLen C.int) (*C.char, C.size_t) {
+func SendUnreliableMessage(messagePtr unsafe.Pointer, messageLen C.int) (unsafe.Pointer, int32) {
 	message := C.GoBytes(messagePtr, messageLen)
 	fmt.Printf("Sending Sphinx packet payload to: %s@%s\n", goService.Name, goService.Provider)
 	msgID, err := goSession.SendUnreliableMessage(goService.Name, goService.Provider, message)
 	if err != nil {
 		panic(err)
 	}
-	cb_msgID := C.CBytes(msgID[:])
-	result := (*C.char)(cb_msgID)
-	return result, C.size_t(len(msgID)) //need to send the length of char array
-
+	length := int32(len(msgID))
+	c_resp := C.CBytes(msgID[:])
+	return c_resp, length
 }
 
 //export Shutdown
