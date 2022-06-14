@@ -5,9 +5,10 @@ use aes::cipher::{KeyIvInit, StreamCipher, StreamCipherSeek};
 use base64ct::{Base64, Encoding};
 use ethers::prelude::{k256::ecdsa::SigningKey, *};
 use ethers::signers::coins_bip39::{English, Mnemonic};
+use ethers::utils::hex;
+use futures::executor::block_on;
 use rand::{CryptoRng, Rng};
 use scrypt::{scrypt, Params as ScryptParams};
-use serde::{Deserialize, Serialize};
 use sha3::{Digest, Keccak256};
 use std::error::Error;
 use std::ffi::CStr;
@@ -17,7 +18,8 @@ use std::path::{Path, PathBuf};
 use tempdir::TempDir;
 
 mod error;
-use error::MnemonicError;
+mod meson_common;
+use error::{MesonError, MnemonicError};
 include!("../bindings.rs");
 
 type Aes128Ctr = ctr::Ctr64LE<aes::Aes128>;
@@ -36,7 +38,7 @@ struct MesonWallet {
 }
 
 //struct for encrypting mnemonic
-#[derive(Serialize, Deserialize)]
+#[derive(serde::Serialize, serde::Deserialize)]
 struct JsonMnemonic {
     mnemonic: String,
     mac: String,
@@ -47,15 +49,17 @@ struct JsonMnemonic {
 //todo: setup meson config
 struct meson_config {}
 
+const meson_service: &str = "meson";
+
 //create a signed tx
 async fn create_signed_tx(
     wallet: &Wallet<SigningKey>,
-    to: H160,
-    value: u128,
-    gas: u128,
-    gas_price: u128,
-    nonce: u128,
-    chain_id: u64,
+    to: Address,
+    value: U256,
+    gas: U256,
+    gas_price: U256,
+    nonce: U256,
+    chain_id: U64,
 ) -> Result<Bytes, WalletError> {
     let pay_tx = TransactionRequest::new()
         .to(to)
@@ -68,6 +72,191 @@ async fn create_signed_tx(
     let signature = wallet.sign_transaction(&pay_tx).await?;
     let rlp_tx = pay_tx.rlp_signed(&signature);
     Ok(rlp_tx)
+}
+
+fn meson_regist_and_send(mut req: Vec<u8>) -> Result<String, error::MesonError> {
+    let configFile = CString::new(
+        "/Users/liaoyuchen/Developer/hashcloak/meson/meson-wallet/meson-wallet/client.example.toml",
+    )
+    .expect("CString::new failed");
+    unsafe {
+        Register(configFile.into_raw());
+        NewClient(
+            CString::new(meson_service)
+                .expect("CString::new failed")
+                .into_raw(),
+        );
+        NewSession();
+        GetService(
+            CString::new(meson_service)
+                .expect("CString::new failed")
+                .into_raw(),
+        );
+
+        let meson_raw_return = BlockingSendUnreliableMessage(
+            req.as_mut_ptr() as *mut c_void,
+            req.len().try_into().expect("len error"),
+        );
+        let meson_return = &*std::ptr::slice_from_raw_parts_mut(
+            meson_raw_return.r0 as *mut u8,
+            meson_raw_return.r1.try_into().expect("len error"),
+        );
+        let mut meson_return: Vec<u8> = meson_return
+            .to_vec()
+            .into_iter()
+            .rev()
+            .skip_while(|&x| x == 0)
+            .collect();
+        meson_return.reverse(); // clear the tailing zeros
+        let meson_response = meson_common::MesonCurrencyResponse::from_json(&meson_return[..]);
+
+        let error = meson_response.Error;
+        let response = meson_response.Message;
+        if error != "" {
+            return Err(error::MesonError::MesonError(error));
+        }
+        //Shutdown();
+        Ok(response)
+    }
+}
+
+pub fn meson_register(path: &str) {
+    let configFile = CString::new(path).expect("CString::new failed");
+    unsafe {
+        Register(configFile.into_raw());
+        NewClient(
+            CString::new(meson_service)
+                .expect("CString::new failed")
+                .into_raw(),
+        );
+        NewSession();
+        GetService(
+            CString::new(meson_service)
+                .expect("CString::new failed")
+                .into_raw(),
+        );
+    }
+}
+
+fn meson_send(mut req: Vec<u8>) -> Result<String, error::MesonError> {
+    unsafe {
+        let meson_raw_return = BlockingSendUnreliableMessage(
+            req.as_mut_ptr() as *mut c_void,
+            req.len().try_into().expect("len error"),
+        );
+        let meson_return = &*std::ptr::slice_from_raw_parts_mut(
+            meson_raw_return.r0 as *mut u8,
+            meson_raw_return.r1.try_into().expect("len error"),
+        );
+
+        let mut meson_return: Vec<u8> = meson_return
+            .to_vec()
+            .into_iter()
+            .rev()
+            .skip_while(|&x| x == 0)
+            .collect();
+        meson_return.reverse(); // clear the tailing zeros
+        let meson_response = meson_common::MesonCurrencyResponse::from_json(&meson_return[..]);
+
+        let error = meson_response.Error;
+        let response = meson_response.Message;
+        if error != "" {
+            return Err(error::MesonError::MesonError(error));
+        }
+        Ok(response)
+    }
+}
+
+pub fn meson_eth_query(
+    from: Address,
+    to: Address,
+    value: U256,
+    data: String,
+) -> Result<String, MesonError> {
+    let json_value = serde_json::Number::from_string_unchecked(value.to_string()); //for serialize big_number
+    let query = meson_common::EthQueryRequest {
+        From: from,
+        To: to,
+        Value: json_value,
+        Data: data,
+    };
+    let query = query.to_json();
+    let query = base64ct::Base64::encode_string(&query[..]);
+    //todo: check if really needs to use base64 query
+    let req = meson_common::MesonCurrencyRequest {
+        Version: 0,
+        Command: meson_common::EthQuery,
+        Ticker: "gor".to_owned(),
+        Payload: query,
+    };
+    println!("{:?}", req.to_json());
+    let resp = meson_send(req.to_json())?;
+    println!("resp:{}", resp);
+
+    Ok(resp)
+}
+
+pub async fn fill_tx(
+    wallet: &Wallet<SigningKey>,
+    to: Address,
+    value: U256,
+    chain_id: U64,
+    data: String,
+) -> Result<Bytes, MesonError> {
+    let query_return = meson_eth_query(wallet.address(), to, value, data)?;
+    let gas_info: meson_common::EthQueryResponse = serde_json::from_str(&query_return).unwrap();
+    let gas = U256::from_big_endian(
+        &hex::decode(gas_info.GasLimit.strip_prefix("0x").unwrap()).unwrap()[..],
+    );
+    println!("{:?}", gas);
+    let gas_price = U256::from_big_endian(
+        &hex::decode(gas_info.GasPrice.strip_prefix("0x").unwrap()).unwrap()[..],
+    );
+    println!("{:?}", gas_price);
+    let mut nonce = gas_info.Nonce.strip_prefix("0x").unwrap().to_string();
+    if nonce.len() % 2 != 0 {
+        nonce = "0".to_string() + &nonce;
+    }
+
+    let nonce = U256::from_big_endian(&hex::decode(nonce).unwrap()[..]);
+    println!("{:?}", nonce);
+    let pay_tx = TransactionRequest::new()
+        .to(to)
+        .value(value)
+        .chain_id(chain_id)
+        .gas(gas)
+        .gas_price(gas_price)
+        .nonce(nonce)
+        .into();
+
+    let signature = wallet.sign_transaction(&pay_tx).await.unwrap();
+    let rlp_tx = pay_tx.rlp_signed(&signature);
+    Ok(rlp_tx)
+}
+
+pub fn process_transaction(
+    wallet: &Wallet<SigningKey>,
+    to: Address,
+    value: U256,
+    chain_id: U64,
+    data: String,
+) -> Result<String, MesonError> {
+    let tx_bytes = block_on(fill_tx(wallet, to, value, chain_id, data)).unwrap();
+    let tx = hex::encode(tx_bytes.0.as_ref());
+    let tx_string = "0x".to_string() + &tx;
+    let meson_tx = meson_common::PostTransactionRequest { TxHex: tx_string }.to_json();
+    let meson_tx = base64ct::Base64::encode_string(&meson_tx[..]);
+    let req = meson_common::MesonCurrencyRequest {
+        Version: 0,
+        Command: meson_common::PostTransaction,
+        Ticker: "gor".to_owned(),
+        Payload: meson_tx,
+    };
+    println!("{:?}", req.to_json());
+    let resp = meson_send(req.to_json())?;
+    println!("resp:{}", resp);
+
+    Ok(resp)
 }
 
 //Derive keys from given mnemonic and index
@@ -224,7 +413,10 @@ where
 }
 
 pub fn ping() {
-    let configFile = CString::new("../client.example.toml").expect("CString::new failed");
+    let configFile = CString::new(
+        "/Users/liaoyuchen/Developer/hashcloak/meson/meson-wallet/meson-wallet/client.example.toml",
+    )
+    .expect("CString::new failed");
     unsafe {
         println!("Register");
         Register(configFile.into_raw());
@@ -266,7 +458,10 @@ pub fn ping() {
     }
 }
 pub fn ping_unblock() {
-    let configFile = CString::new("../client.example.toml").expect("CString::new failed");
+    let configFile = CString::new(
+        "/Users/liaoyuchen/Developer/hashcloak/meson/meson-wallet/meson-wallet/client.example.toml",
+    )
+    .expect("CString::new failed");
     unsafe {
         println!("Register");
         Register(configFile.into_raw());
@@ -299,6 +494,31 @@ pub fn ping_unblock() {
     }
 }
 
+pub fn test_tx() {
+    let tx: Vec<u8> = vec![
+        123, 34, 86, 101, 114, 115, 105, 111, 110, 34, 58, 48, 44, 34, 67, 111, 109, 109, 97, 110,
+        100, 34, 58, 48, 44, 34, 84, 105, 99, 107, 101, 114, 34, 58, 34, 103, 111, 114, 34, 44, 34,
+        80, 97, 121, 108, 111, 97, 100, 34, 58, 34, 101, 121, 74, 85, 101, 69, 104, 108, 101, 67,
+        73, 54, 73, 106, 66, 52, 90, 106, 103, 50, 77, 122, 103, 119, 79, 68, 81, 50, 78, 68, 85,
+        48, 77, 68, 104, 108, 78, 84, 103, 121, 78, 84, 73, 119, 79, 68, 107, 48, 78, 50, 86, 104,
+        78, 109, 73, 120, 89, 106, 104, 104, 89, 84, 70, 108, 90, 106, 65, 50, 89, 109, 86, 108,
+        90, 68, 89, 53, 77, 106, 81, 53, 79, 68, 66, 107, 79, 71, 74, 109, 77, 122, 103, 52, 79,
+        84, 103, 51, 90, 106, 100, 106, 89, 122, 66, 104, 79, 68, 65, 121, 90, 87, 69, 119, 90,
+        109, 69, 53, 89, 122, 77, 53, 78, 84, 86, 105, 77, 68, 73, 121, 89, 109, 89, 122, 79, 71,
+        73, 119, 77, 84, 103, 122, 90, 87, 77, 52, 77, 50, 77, 121, 77, 68, 86, 105, 77, 84, 104,
+        106, 79, 68, 86, 106, 78, 87, 90, 106, 90, 68, 104, 104, 78, 71, 69, 52, 78, 84, 107, 50,
+        89, 50, 69, 121, 78, 50, 70, 107, 78, 50, 73, 51, 90, 106, 70, 105, 77, 87, 73, 53, 90, 71,
+        69, 119, 78, 84, 90, 107, 77, 71, 77, 119, 89, 106, 65, 120, 78, 87, 77, 52, 79, 84, 70,
+        107, 90, 109, 86, 108, 78, 71, 85, 121, 89, 122, 89, 121, 78, 106, 103, 49, 78, 50, 77, 52,
+        78, 68, 69, 121, 78, 109, 85, 121, 78, 50, 82, 106, 78, 109, 86, 107, 89, 122, 74, 105, 77,
+        109, 90, 105, 79, 71, 74, 108, 79, 71, 73, 51, 89, 84, 90, 105, 79, 84, 77, 49, 90, 68, 69,
+        122, 78, 83, 74, 57, 34, 125,
+    ];
+
+    let resp = meson_send(tx).unwrap();
+    println!("{}", resp);
+}
+
 #[cfg(test)]
 
 mod tests {
@@ -320,6 +540,7 @@ mod tests {
 
     #[test]
     //todo : create a better test
+    //todo: change value type
     fn create_tx() {
         let wallet: Wallet<SigningKey> =
             "2cd0fc69151afffe19e66db7e31ec34f1fbf10552983711faccba030025fc706"
@@ -330,11 +551,11 @@ mod tests {
             "0x7ea6b1b8aa1ef06beed6924980d8bf388987f7cc"
                 .parse()
                 .unwrap(),
-            10,
-            2_000_000,
-            21_000_000_000,
-            0,
-            5,
+            10.into(),
+            U256::from(2_000_000),
+            U256::from_dec_str("200000000").unwrap(),
+            0.into(),
+            5.into(),
         ))
         .unwrap();
 
@@ -399,5 +620,41 @@ mod tests {
                 .unwrap();
 
         assert_eq!(wallet, wallet2);
+    }
+
+    // fn test_eth_query() {
+    //     let res = meson_eth_query(
+    //         Address::from_str("0x64440a8ca29D455029E28cDa94096f3EaB7b248a").unwrap(),
+    //         Address::from_str("0x85ef6db74c13B3bfa12A784702418e5aAfad73EB").unwrap(),
+    //         U256::from_dec_str("123"),
+    //         "".to_owned(),
+    //     );
+
+    #[test]
+
+    fn test_tx() {
+        let tx: Vec<u8> = vec![
+            123, 34, 86, 101, 114, 115, 105, 111, 110, 34, 58, 48, 44, 34, 67, 111, 109, 109, 97,
+            110, 100, 34, 58, 48, 44, 34, 84, 105, 99, 107, 101, 114, 34, 58, 34, 103, 111, 114,
+            34, 44, 34, 80, 97, 121, 108, 111, 97, 100, 34, 58, 34, 101, 121, 74, 85, 101, 69, 104,
+            108, 101, 67, 73, 54, 73, 106, 66, 52, 90, 106, 103, 50, 77, 122, 103, 119, 79, 68, 81,
+            50, 78, 68, 85, 48, 77, 68, 104, 108, 78, 84, 103, 121, 78, 84, 73, 119, 79, 68, 107,
+            48, 78, 50, 86, 104, 78, 109, 73, 120, 89, 106, 104, 104, 89, 84, 70, 108, 90, 106, 65,
+            50, 89, 109, 86, 108, 90, 68, 89, 53, 77, 106, 81, 53, 79, 68, 66, 107, 79, 71, 74,
+            109, 77, 122, 103, 52, 79, 84, 103, 51, 90, 106, 100, 106, 89, 122, 66, 104, 79, 68,
+            65, 121, 90, 87, 69, 119, 90, 109, 69, 53, 89, 122, 77, 53, 78, 84, 86, 105, 77, 68,
+            73, 121, 89, 109, 89, 122, 79, 71, 73, 119, 77, 84, 103, 122, 90, 87, 77, 52, 77, 50,
+            77, 121, 77, 68, 86, 105, 77, 84, 104, 106, 79, 68, 86, 106, 78, 87, 90, 106, 90, 68,
+            104, 104, 78, 71, 69, 52, 78, 84, 107, 50, 89, 50, 69, 121, 78, 50, 70, 107, 78, 50,
+            73, 51, 90, 106, 70, 105, 77, 87, 73, 53, 90, 71, 69, 119, 78, 84, 90, 107, 77, 71, 77,
+            119, 89, 106, 65, 120, 78, 87, 77, 52, 79, 84, 70, 107, 90, 109, 86, 108, 78, 71, 85,
+            121, 89, 122, 89, 121, 78, 106, 103, 49, 78, 50, 77, 52, 78, 68, 69, 121, 78, 109, 85,
+            121, 78, 50, 82, 106, 78, 109, 86, 107, 89, 122, 74, 105, 77, 109, 90, 105, 79, 71, 74,
+            108, 79, 71, 73, 51, 89, 84, 90, 105, 79, 84, 77, 49, 90, 68, 69, 122, 78, 83, 74, 57,
+            34, 125,
+        ];
+
+        let resp = meson_send(tx).unwrap();
+        println!("{}", resp);
     }
 }

@@ -56,3 +56,9 @@ impl From<base64ct::Error> for MnemonicError {
         Self::Base64Error(e.to_string())
     }
 }
+
+#[derive(Error, Debug)]
+pub enum MesonError {
+    #[error("MesonError")]
+    MesonError(String),
+}
