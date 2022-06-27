@@ -3,7 +3,6 @@ package main
 import "C"
 
 import (
-	"fmt"
 	"unsafe"
 
 	client "github.com/hashcloak/Meson-client"
@@ -62,7 +61,7 @@ func GetService(service *C.char) {
 //export BlockingSendUnreliableMessage
 func BlockingSendUnreliableMessage(messagePtr unsafe.Pointer, messageLen C.int) (unsafe.Pointer, int32) {
 	message := C.GoBytes(messagePtr, messageLen)
-	fmt.Printf("Sending Sphinx packet payload to: %s@%s\n", goService.Name, goService.Provider)
+	//fmt.Printf("Sending Sphinx packet payload to: %s@%s\n", goService.Name, goService.Provider)
 	resp, err := goSession.BlockingSendUnreliableMessage(goService.Name, goService.Provider, message)
 	if err != nil {
 		panic(err)
@@ -79,7 +78,7 @@ func BlockingSendUnreliableMessage(messagePtr unsafe.Pointer, messageLen C.int) 
 //export SendUnreliableMessage
 func SendUnreliableMessage(messagePtr unsafe.Pointer, messageLen C.int) (unsafe.Pointer, int32) {
 	message := C.GoBytes(messagePtr, messageLen)
-	fmt.Printf("Sending Sphinx packet payload to: %s@%s\n", goService.Name, goService.Provider)
+	//fmt.Printf("Sending Sphinx packet payload to: %s@%s\n", goService.Name, goService.Provider)
 	msgID, err := goSession.SendUnreliableMessage(goService.Name, goService.Provider, message)
 	if err != nil {
 		panic(err)

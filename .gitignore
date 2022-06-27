@@ -12,3 +12,4 @@ Cargo.lock
 *.so
 *.h
 cping
+keystore

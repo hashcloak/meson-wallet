@@ -8,7 +8,6 @@ edition = "2021"
 [dependencies]
 
 ethers = { git = "https://github.com/gakonst/ethers-rs" }
-clap = { version = "3.0", features = ["derive"] }
 futures = "0.3"
 ctr = "0.9.1"
 scrypt = "0.8.1"
@@ -21,6 +20,9 @@ serde_json = {version = "1.0", features = ["arbitrary_precision"]}
 tempdir = "0.3"
 thiserror = "1.0"
 eth-keystore = "0.4.1"
+toml = "0.5"
+rpassword = "6.0"
+dialoguer = "0.10"
 
 [build-dependencies]
 bindgen = "0.53.1"

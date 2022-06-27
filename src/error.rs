@@ -59,6 +59,12 @@ impl From<base64ct::Error> for MnemonicError {
 
 #[derive(Error, Debug)]
 pub enum MesonError {
-    #[error("MesonError")]
+    #[error("MesonError: {0}")]
     MesonError(String),
+}
+
+#[derive(Error, Debug)]
+pub enum MesonWalletError {
+    #[error("MesonWalletError")]
+    MesonWalletError(String),
 }
