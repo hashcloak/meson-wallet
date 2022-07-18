@@ -12,7 +12,7 @@
 
 [Debug]
   DisableDecoyTraffic = true
-  SessionDialTimeout = 1200000
+  SessionDialTimeout = 120000000
   InitialMaxPKIRetrievalDelay = 30
   CaseSensitiveUserIdentifiers = false
   PollingInterval = 100
@@ -26,5 +26,5 @@
   RPCAddress = "tcp://127.0.0.1:21483"
   [Katzenmint.TrustOptions]
     Period = 600000000000
-    Height = 1882
-    Hash = [17, 218, 39, 86, 158, 2, 223, 29, 216, 80, 65, 118, 194, 138, 202, 231, 71, 223, 241, 174, 234, 126, 14, 73, 169, 0, 95, 118, 15, 40, 106, 216]
+    Height = 294
+    Hash = [228, 74, 124, 161, 12, 51, 216, 93, 239, 171, 187, 221, 198, 232, 28, 227, 13, 40, 221, 31, 14, 23, 67, 231, 227, 140, 213, 121, 153, 151, 138, 181]

@@ -2,17 +2,14 @@
 
 A privacy-first cryptocurrency wallet
 
-To test C-binding:
-
-1. Build the cping executable.
+1. Build the golang-c bindings.
 ```BASH
-$ go build -o client_bindings.so -buildmode=c-shared bindings.go
-$ gcc ./examples/ping.c ./client_bindings.so -I . -o cping
+$ go build -o ./lib/libclient_bindings.so -buildmode=c-shared ./lib/bindings.go
 ```
 
 2. Follow the steps at [Meson local testnet](https://github.com/hashcloak/Meson/tree/master/testnet/local) to set up a testnet and update ./client.example.toml.
 
-3. Execute cping
+3. Start the wallet
 ```BASH
-$ ./cping ./examples/client.example.toml
+$ cargo run ('config path')
 ```
