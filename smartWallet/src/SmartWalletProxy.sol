@@ -11,6 +11,7 @@ import "openzeppelin-contracts/contracts/proxy/Proxy.sol";
  * implementation behind the proxy.
  */
 contract SmartWalletProxy is Proxy, ERC1967Upgrade {
+    //currently use ERC1967Proxy.sol in AccountFactory
     /**
      * @dev Initializes the upgradeable proxy with an initial implementation specified by `_logic`.
      *

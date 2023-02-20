@@ -3,15 +3,21 @@ pragma solidity ^0.8.12;
 
 import "openzeppelin-contracts/contracts/proxy/utils/UUPSUpgradeable.sol";
 import "openzeppelin-contracts/contracts/proxy/utils/Initializable.sol";
+import "openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol";
 import "./core/BaseAccount.sol";
 
-//todo: do we need ownable?
 contract SmartWalletLogic is BaseAccount, UUPSUpgradeable, Initializable {
+    using ECDSA for bytes32;
+
     //explicit sizes of nonce, to fit a single storage cell with "owner"
     uint96 private _nonce;
     address public owner; //todo: do we set an owner (User Needs EOA)
-    uint256[4] private publicKey;
-    IEntryPoint private _entryPoint; //todo: do we need to update entrypoint
+    IEntryPoint private immutable _entryPoint;
+
+    event SmartWalletInitialized(
+        IEntryPoint indexed entryPoint,
+        address indexed owner
+    );
 
     function nonce() public view virtual override returns (uint256) {
         return _nonce;
@@ -28,12 +34,17 @@ contract SmartWalletLogic is BaseAccount, UUPSUpgradeable, Initializable {
 
     receive() external payable {}
 
-    function initialize(
-        IEntryPoint anEntryPoint,
-        address _owner
-    ) public initializer {
+    constructor(IEntryPoint anEntryPoint) {
         _entryPoint = anEntryPoint;
-        owner = _owner;
+    }
+
+    function initialize(address anOwner) public virtual initializer {
+        _initialize(anOwner);
+    }
+
+    function _initialize(address anOwner) internal virtual {
+        owner = anOwner;
+        emit SmartWalletInitialized(_entryPoint, owner);
     }
 
     modifier onlyOwner() {
@@ -67,6 +78,9 @@ contract SmartWalletLogic is BaseAccount, UUPSUpgradeable, Initializable {
         bytes32 userOpHash,
         address
     ) internal virtual override returns (uint256 sigTimeRange) {
+        bytes32 hash = userOpHash.toEthSignedMessageHash();
+        if (owner != hash.recover(userOp.signature))
+            return SIG_VALIDATION_FAILED;
         return 0;
     }
 
@@ -132,6 +146,7 @@ contract SmartWalletLogic is BaseAccount, UUPSUpgradeable, Initializable {
         entryPoint().withdrawTo(withdrawAddress, amount);
     }
 
+    // check if update authorized
     function _authorizeUpgrade(
         address newImplementation
     ) internal view override {
