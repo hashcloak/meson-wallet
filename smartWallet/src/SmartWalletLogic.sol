@@ -11,6 +11,7 @@ contract SmartWalletLogic is BaseAccount, UUPSUpgradeable, Initializable {
 
     //explicit sizes of nonce, to fit a single storage cell with "owner"
     uint96 private _nonce;
+    uint256 public testingNum;
     address public owner; //todo: do we set an owner (User Needs EOA)
     IEntryPoint private immutable _entryPoint;
 
@@ -152,5 +153,9 @@ contract SmartWalletLogic is BaseAccount, UUPSUpgradeable, Initializable {
     ) internal view override {
         (newImplementation);
         _onlyOwner();
+    }
+
+    function increase_num() public {
+        testingNum += 1;
     }
 }
