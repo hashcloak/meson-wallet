@@ -5,8 +5,8 @@ import "C"
 import (
 	"unsafe"
 
-	client "github.com/hashcloak/Meson-client"
-	"github.com/hashcloak/Meson-client/config"
+	client "github.com/hashcloak/Meson/client"
+	"github.com/hashcloak/Meson/client/config"
 	"github.com/katzenpost/client/utils"
 	"github.com/katzenpost/core/crypto/ecdh"
 )
