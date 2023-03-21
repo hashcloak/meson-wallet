@@ -1,4 +1,4 @@
-use crate::Account;
+use crate::wallet::Account;
 use dialoguer::console::Term;
 use ethers::prelude::NameOrAddress;
 use ethers::types::transaction::eip2718::TypedTransaction;

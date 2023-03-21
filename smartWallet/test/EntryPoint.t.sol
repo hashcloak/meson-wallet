@@ -37,15 +37,17 @@ contract EnrtyPointTest is Test {
         uint256 salt = 123;
         //calculate wallet address
         address sender = af.getAddress(owner1, 123);
+        address dest = 0x85ef6db74c13B3bfa12A784702418e5aAfad73EB;
         assertEq(sender.code.length == 0, true);
         //prefund wallet
         vm.prank(owner1);
         ep.depositTo{value: 0.1 ether}(sender);
+        vm.deal(sender, 1 ether);
 
         bytes memory initCode = tu.createInitCode(af, owner1, salt);
         bytes memory callData = abi.encodeCall(
-            SmartWalletLogic.increase_num,
-            ()
+            SmartWalletLogic.execute,
+            (dest, 10, "")
         );
         UserOperation memory userOp = UserOperation(
             sender,
@@ -68,7 +70,7 @@ contract EnrtyPointTest is Test {
         //check sender created
         assertEq(sender.code.length > 0, true);
         //check sender's testnum updated
-        assertEq(SmartWalletLogic(payable(sender)).testingNum(), 1);
+        assertEq(dest.balance, 10);
         //nonce won't update when initcode != ""
     }
 }

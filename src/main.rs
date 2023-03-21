@@ -1,4 +1,9 @@
 use std::env;
+mod cli;
+mod error;
+mod meson_common;
+mod wallet;
+mod user_opertaion;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -7,9 +12,9 @@ fn main() {
         Some(path) => wallet_config_path = path,
         None => wallet_config_path = "wallet_config.toml",
     }
-    let wallet = meson_wallet::MesonWallet::new(wallet_config_path);
+    let wallet = wallet::MesonWallet::new(wallet_config_path);
     loop {
-        match meson_wallet::cli::select_func() {
+        match cli::select_func() {
             Ok(input) => {
                 if input == 0 {
                     //import mnemonic

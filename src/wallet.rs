@@ -1,6 +1,7 @@
 #![allow(non_upper_case_globals)]
 #![allow(non_camel_case_types)]
 #![allow(non_snake_case)]
+use crate::{cli, meson_common};
 use aes::cipher::{KeyIvInit, StreamCipher};
 use base64ct::{Base64, Encoding};
 use dialoguer::{console, Confirm, Input};
@@ -20,11 +21,10 @@ use std::fmt;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
-
-pub mod cli;
-pub mod error;
-mod meson_common;
-use error::{MesonError, MesonWalletError, MnemonicError};
+// pub mod cli;
+// pub mod error;
+// mod meson_common;
+use crate::error::{MesonError, MesonWalletError, MnemonicError};
 include!("../bindings.rs");
 
 type Aes128Ctr = ctr::Ctr64LE<aes::Aes128>;
@@ -262,7 +262,6 @@ impl MesonWallet {
             nonce = "0".to_string() + &nonce;
         }
         let nonce = U256::from_big_endian(&hex::decode(nonce).unwrap()[..]);
-
         let pay_tx = TransactionRequest::new()
             .from(from)
             .to(to)
