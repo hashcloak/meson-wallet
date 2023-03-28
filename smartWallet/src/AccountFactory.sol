@@ -3,6 +3,7 @@ pragma solidity ^0.8.12;
 
 import "openzeppelin-contracts/contracts/utils/Create2.sol";
 import "openzeppelin-contracts/contracts/proxy/ERC1967/ERC1967Proxy.sol";
+import "./SmartWalletProxy.sol";
 import "./SmartWalletLogic.sol";
 
 /**
@@ -34,7 +35,7 @@ contract AccountFactory {
         }
         ret = SmartWalletLogic(
             payable(
-                new ERC1967Proxy{salt: bytes32(salt)}(
+                new SmartWalletProxy{salt: bytes32(salt)}(
                     address(accountImplementation),
                     abi.encodeCall(SmartWalletLogic.initialize, (owner))
                 )
@@ -54,7 +55,7 @@ contract AccountFactory {
                 bytes32(salt),
                 keccak256(
                     abi.encodePacked(
-                        type(ERC1967Proxy).creationCode,
+                        type(SmartWalletProxy).creationCode,
                         abi.encode(
                             address(accountImplementation),
                             abi.encodeCall(SmartWalletLogic.initialize, (owner))

@@ -8,7 +8,7 @@ pub struct __BindgenComplex<T> {
 }
 pub type size_t = ::std::os::raw::c_ulong;
 pub type wchar_t = ::std::os::raw::c_int;
-pub type max_align_t = u128;
+pub type max_align_t = f64;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct _GoString_ {
@@ -58,7 +58,7 @@ pub type GoInt64 = ::std::os::raw::c_longlong;
 pub type GoUint64 = ::std::os::raw::c_ulonglong;
 pub type GoInt = GoInt64;
 pub type GoUint = GoUint64;
-pub type GoUintptr = ::std::os::raw::c_ulong;
+pub type GoUintptr = size_t;
 pub type GoFloat32 = f32;
 pub type GoFloat64 = f64;
 pub type GoComplex64 = __BindgenComplex<f32>;

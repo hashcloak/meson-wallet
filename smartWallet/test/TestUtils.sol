@@ -2,8 +2,10 @@
 pragma solidity ^0.8.12;
 
 import "forge-std/Test.sol";
+import "openzeppelin-contracts/contracts/utils/Create2.sol";
 import "../src/AccountFactory.sol";
 import "../src/interfaces/UserOperation.sol";
+import "../src/SmartWalletLogic.sol";
 
 contract TestUtils is Test {
     using ECDSA for bytes32;
@@ -50,5 +52,31 @@ contract TestUtils is Test {
         UserOperation memory mUserOp = userOp;
         mUserOp.signature = signature;
         return (mUserOp, opHash);
+    }
+
+    function testEncode() public {
+        bytes memory enc = type(SmartWalletProxy).creationCode;
+        console.logBytes(enc);
+    }
+
+    function testCreat2() public {
+        uint salt = 100;
+        address owner = 0x5B38Da6a701c568545dCfcB03FcB875f56beddC4;
+        address accountImplementation = 0xc0ffee254729296a45a3885639AC7E10F9d54979;
+        address fac = 0xd9145CCE52D386f254917e481eB44e9943F39138;
+        address addr = Create2.computeAddress(
+            bytes32(salt),
+            keccak256(
+                abi.encodePacked(
+                    type(SmartWalletProxy).creationCode,
+                    abi.encode(
+                        accountImplementation,
+                        abi.encodeCall(SmartWalletLogic.initialize, (owner))
+                    )
+                )
+            ),
+            fac
+        );
+        console.logAddress(addr);
     }
 }
