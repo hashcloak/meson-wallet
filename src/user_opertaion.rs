@@ -8,7 +8,7 @@ use std::str::FromStr;
 use serde::{Deserialize, Serialize};
 
 /// Parameters for user_operation
-#[derive(Clone, Default, PartialEq, Eq, Debug, EthAbiCodec, EthAbiType)]
+#[derive(Clone, Default, PartialEq, Eq, Debug, EthAbiCodec, EthAbiType, Serialize)]
 pub struct UserOperation {
     /// The account making the operation
     pub sender: Address,
