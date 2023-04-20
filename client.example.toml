@@ -19,12 +19,12 @@
 
 [Katzenmint]
   ChainID = "katzenmint-chain-71DRoz"
-  PrimaryAddress = "tcp://127.0.0.1:21483"
-  WitnessesAddresses = ["127.0.0.1:21483"]
+  PrimaryAddress = "tcp://104.131.108.194:26657"
+  WitnessesAddresses = ["104.131.108.194:26657"]
   DatabaseName = "ping"
   DatabaseDir = "/tmp/meson/ping/db"
-  RPCAddress = "tcp://127.0.0.1:21483"
+  RPCAddress = "tcp://104.131.108.194:26657"
   [Katzenmint.TrustOptions]
     Period = "10m0s"
-    Height = 158
-    Hash = [126, 63, 187, 240, 35, 137, 145, 224, 101, 252, 175, 233, 136, 126, 102, 105, 115, 224, 116, 96, 58, 13, 54, 162, 89, 122, 125, 222, 220, 217, 114, 49]
+    Height = 4736
+    Hash = [88, 226, 174, 145, 65, 83, 45, 6, 61, 77, 28, 165, 120, 168, 55, 29, 153, 232, 251, 168, 70, 14, 71, 136, 159, 205, 51, 138, 183, 203, 213, 132]

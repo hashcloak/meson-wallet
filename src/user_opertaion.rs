@@ -17,28 +17,28 @@ pub struct UserOperation {
     pub nonce: U256,
 
     /// The initCode of the account (needed if and only if the account is not yet on-chain and needs to be created)
-    pub init_code: Bytes,
+    pub initCode: Bytes,
 
     /// The data to pass to the sender during the main execution call
-    pub call_data: Bytes,
+    pub callData: Bytes,
 
     /// The amount of gas to allocate the main execution call
-    pub call_gas_imit: U256,
+    pub callGasLimit: U256,
 
     /// The amount of gas to allocate for the verification step
-    pub verification_gas_limit: U256,
+    pub verificationGasLimit: U256,
 
     /// The amount of gas to pay for to compensate the bundler for pre-verification execution and calldata
-    pub pre_verification_gas: U256,
+    pub preVerificationGas: U256,
 
     /// Maximum fee per gas (similar to EIP-1559 max_fee_per_gas)
-    pub max_fee_per_gas: U256,
+    pub maxFeePerGas: U256,
 
     /// Maximum priority fee per gas (similar to EIP-1559 max_priority_fee_per_gas)
-    pub max_priority_fee_per_gas: U256,
+    pub maxPriorityFeePerGas: U256,
 
     /// Address of paymaster sponsoring the transaction, followed by extra data to send to the paymaster (empty for self-sponsored transaction)
-    pub paymaster_and_data: Bytes,
+    pub paymasterAndData: Bytes,
 
     /// Data passed into the account along with the nonce during the verification step
     pub signature: Bytes, /////////////////  Celo-specific transaction fields /////////////////
@@ -67,56 +67,56 @@ impl UserOperation {
     /// Sets the `init_code` field in the transaction to the provided value
     #[must_use]
     pub fn init_code<T: Into<Bytes>>(mut self, init_code: T) -> Self {
-        self.init_code = init_code.into();
+        self.initCode = init_code.into();
         self
     }
 
     /// Sets the `call_data` field in the transaction to the provided value
     #[must_use]
     pub fn call_data<T: Into<Bytes>>(mut self, call_data: T) -> Self {
-        self.call_data = call_data.into();
+        self.callData = call_data.into();
         self
     }
 
     /// Sets the `call_gas_imit` field in the transaction to the provided value
     #[must_use]
     pub fn call_gas_imit<T: Into<U256>>(mut self, call_gas_imit: T) -> Self {
-        self.call_gas_imit = call_gas_imit.into();
+        self.callGasLimit = call_gas_imit.into();
         self
     }
 
     /// Sets the `verification_gas_limit` field in the transaction to the provided value
     #[must_use]
     pub fn verification_gas_limit<T: Into<U256>>(mut self, verification_gas_limit: T) -> Self {
-        self.verification_gas_limit = verification_gas_limit.into();
+        self.verificationGasLimit = verification_gas_limit.into();
         self
     }
 
     /// Sets the `pre_verification_gas` field in the transaction to the provided value
     #[must_use]
     pub fn pre_verification_gas<T: Into<U256>>(mut self, pre_verification_gas: T) -> Self {
-        self.pre_verification_gas = pre_verification_gas.into();
+        self.preVerificationGas = pre_verification_gas.into();
         self
     }
 
     /// Sets the `max_fee_per_gas` field in the transaction to the provided value
     #[must_use]
     pub fn max_fee_per_gas<T: Into<U256>>(mut self, max_fee_per_gas: T) -> Self {
-        self.max_fee_per_gas = max_fee_per_gas.into();
+        self.maxFeePerGas = max_fee_per_gas.into();
         self
     }
 
     /// Sets the `max_priority_fee_per_gas` field in the transaction to the provided value
     #[must_use]
     pub fn max_priority_fee_per_gas<T: Into<U256>>(mut self, max_priority_fee_per_gas: T) -> Self {
-        self.max_priority_fee_per_gas = max_priority_fee_per_gas.into();
+        self.maxPriorityFeePerGas = max_priority_fee_per_gas.into();
         self
     }
 
     /// Sets the `paymaster_and_data` field in the transaction to the provided value
     #[must_use]
     pub fn paymaster_and_data<T: Into<Bytes>>(mut self, paymaster_and_data: T) -> Self {
-        self.paymaster_and_data = paymaster_and_data.into();
+        self.paymasterAndData = paymaster_and_data.into();
         self
     }
 

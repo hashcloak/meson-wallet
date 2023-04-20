@@ -17,3 +17,10 @@ impl UserOperationRequest {
         json_vec
     }
 }
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct GasQueryResult {
+    pub preVerificationGas: u128,
+    pub verificationGas: u128,
+    pub callGasLimit: u128,
+}
