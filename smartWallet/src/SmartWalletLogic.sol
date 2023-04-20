@@ -75,9 +75,8 @@ contract SmartWalletLogic is BaseAccount, UUPSUpgradeable, Initializable {
 
     function _validateSignature(
         UserOperation calldata userOp,
-        bytes32 userOpHash,
-        address
-    ) internal virtual override returns (uint256 sigTimeRange) {
+        bytes32 userOpHash
+    ) internal virtual override returns (uint256 validationData) {
         bytes32 hash = userOpHash.toEthSignedMessageHash();
         if (owner != hash.recover(userOp.signature))
             return SIG_VALIDATION_FAILED;

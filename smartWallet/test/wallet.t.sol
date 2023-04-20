@@ -52,7 +52,7 @@ contract WalletTest is Test {
         uint256 preNonce = impl.nonce();
         bytes32 opHash;
         (userOp, opHash) = tu.signUserOp(userOp, address(this), owner_key);
-        uint256 result = impl.validateUserOp(userOp, opHash, address(0), 0);
+        uint256 result = impl.validateUserOp(userOp, opHash, 0);
         assertEq(result, 0);
         assertEq(impl.nonce(), preNonce + 1);
     }
@@ -78,7 +78,7 @@ contract WalletTest is Test {
 
         uint256 preNonce = wallet.nonce();
         bytes32 opHash = SignUserOp(userOp, owner_key);
-        uint256 result = wallet.validateUserOp(userOp, opHash, address(0), 0);
+        uint256 result = wallet.validateUserOp(userOp, opHash, 0);
         assertEq(result, 0);
         assertEq(wallet.nonce(), preNonce + 1);
     }

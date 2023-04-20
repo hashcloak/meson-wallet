@@ -12,7 +12,6 @@ contract Deploy is Script {
         vm.startBroadcast(deployerPrivateKey);
         EntryPoint ep = new EntryPoint();
         AccountFactory af = new AccountFactory(IEntryPoint(ep));
-        SmartWalletLogic impl = new SmartWalletLogic(IEntryPoint(ep));
         vm.stopBroadcast();
     }
 }
