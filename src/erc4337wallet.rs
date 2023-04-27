@@ -1,8 +1,13 @@
+#![allow(non_snake_case)]
+use crate::cli;
 use crate::create_sender_util::{create2addr, create_init_code};
-use crate::erc4337_common::GasQueryResult;
+use crate::erc4337_common::{ERC4337Error, GasQueryResult};
 use crate::user_opertaion::UserOperation;
 use ethers::abi::AbiEncode;
-use ethers::prelude::{Address, Bytes, Provider, U256};
+use ethers::prelude::k256::ecdsa::SigningKey;
+use ethers::prelude::{Address, Bytes, Provider, Signature, Wallet, U256};
+use ethers::signers::Signer;
+use ethers::utils::keccak256;
 use ethers::utils::{__serde_json::json, hex};
 use futures::executor::block_on;
 use rand::random;
@@ -10,6 +15,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
 use std::io::Write;
+use std::ops::Add;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
@@ -68,10 +74,15 @@ impl Erc4337Wallet {
         account
     }
 
+    //test only, should sendthrough meson
     //send_tx without paymaster
-    pub async fn send_tx(&self, account: &SimpleAccount, to: Address, amount: U256) {
-        //todo: need to be able to query nonce on-chain
-        let nonce = 0;
+    pub async fn fill_user_op(
+        &self,
+        account: &SimpleAccount,
+        to: Address,
+        amount: U256,
+        chain_id: U256,
+    ) -> (UserOperation, String) {
         let mut userOp = UserOperation::new();
         //only include initcode if not deployed yet
         userOp = if !account.deployed {
@@ -81,31 +92,83 @@ impl Erc4337Wallet {
             userOp
         };
         userOp = userOp.sender(account.address);
-        userOp = userOp.nonce(nonce);
+
+        //query nonce only if deployed
+        if account.deployed {
+            let addr_str = "0x".to_owned() + &hex::encode(account.address);
+            let nonce = self.query_nonce(addr_str).await;
+            userOp = userOp.nonce(nonce);
+        }
 
         //create calldata
-        let mut signature = Bytes::from_str(EXECUTE_SIGNATURE).unwrap().to_vec();
+        let mut func_signature = Bytes::from_str(EXECUTE_SIGNATURE).unwrap().to_vec();
         let mut param = AbiEncode::encode((to, amount, Bytes::default()));
-        let call_data = [signature, param].concat();
+        let call_data = [func_signature, param].concat();
         userOp = userOp.call_data(call_data);
         userOp = userOp.verification_gas_limit(0xffffff);
         userOp = userOp.pre_verification_gas(0xffffff);
-        userOp = userOp.signature(Bytes::from_str("0x43b8da28f2e270442c1618c6594a8b9c3cc44fd321d6135339be632af153e1fa5a00d1b1336d40091ae887b0b8d2a8a6f20b8d9818435196082f38cc46e0bad11b").unwrap());
-        let gas_info = self.query_gas_info_test(account, &userOp).await;
-        userOp = userOp
-            .call_gas_imit(gas_info.verificationGas)
-            .verification_gas_limit(gas_info.verificationGas)
-            .pre_verification_gas(gas_info.preVerificationGas);
 
-        println!("{userOp:?}")
+        //set signature to random data for querying gas
+        userOp = userOp.signature(Bytes::from_str("0x43b8da28f2e270442c1618c6594a8b9c3cc44fd321d6135339be632af153e1fa5a00d1b1336d40091ae887b0b8d2a8a6f20b8d9818435196082f38cc46e0bad11b").unwrap());
+        let gas_info = self.query_gas_info(account, &userOp).await;
+        println!("{gas_info:?}");
+        userOp = userOp
+            .call_gas_imit(gas_info.callGasLimit)
+            .verification_gas_limit(50000)
+            .pre_verification_gas(100000)
+            .max_fee_per_gas(1000000);
+
+        //set signature to empty bytes for signing
+        userOp = userOp.signature(Bytes::default());
+        let op_clone = userOp.clone();
+
+        let owner_addr_str = "0x".to_owned() + &hex::encode(account.owner);
+        let mut keypath = self
+            .key_store_path
+            .join("keystore")
+            .join(owner_addr_str.clone());
+        if !keypath.exists() {
+            keypath = self
+                .key_store_path
+                .join("imported_keystore")
+                .join(owner_addr_str);
+        }
+        let password = cli::prompt_password_confirm().unwrap();
+
+        let owner_wallet = Wallet::decrypt_keystore(keypath, password).unwrap();
+        // let owner_wallet: Wallet<SigningKey> =
+        //     "d5d81bccdb261aa45fc232b15689d29b60dca53c5329d52081a911731fb5112b"
+        //         .parse()
+        //         .unwrap();
+        let (signature, op_hash) = self.light_sign(op_clone, owner_wallet, account, chain_id);
+        userOp = userOp.signature(signature.to_vec());
+        let hash_str = hex::encode(op_hash);
+        println!("{userOp:?}");
+        (userOp, hash_str)
     }
 
-    pub async fn query_gas_info_test(
+    pub fn light_sign(
+        &self,
+        userOp: UserOperation,
+        owner_wallet: Wallet<SigningKey>,
+        account: &SimpleAccount,
+        chain_id: U256,
+    ) -> (Signature, [u8; 32]) {
+        let op_hash = keccak256(AbiEncode::encode((
+            userOp.hash(),
+            account.entry_point,
+            chain_id,
+        )));
+        let signature: Signature = block_on(owner_wallet.sign_message(op_hash)).unwrap();
+        (signature, op_hash)
+    }
+
+    //test only, should query through meson
+    pub async fn query_gas_info(
         &self,
         account: &SimpleAccount,
         userOp: &UserOperation,
     ) -> GasQueryResult {
-        //test only, should query through meson
         let rpc_url = "http://localhost:4337";
         //let rpc_url = "https://node.stackup.sh/v1/rpc/9c21ff1cba3a5407d43324bfc6718044de9203b2b6fb09aac8b52a7d7496bdf5";
         let provider = Provider::try_from(rpc_url).unwrap();
@@ -120,8 +183,55 @@ impl Erc4337Wallet {
         query_result
     }
 
-    //shoud use send_tx to directly deploy account normally
-    pub fn deploy_account(&self, account: SimpleAccount) {}
+    //test only, should query through meson
+    pub async fn query_nonce(&self, smart_account_addr: String) -> U256 {
+        let rpc_url = "http://localhost:8545";
+        let provider = Provider::try_from(rpc_url).unwrap();
+        let nonce: U256 = provider
+            .request(
+                "eth_call",
+                json!([{
+                    "to": smart_account_addr,
+                    "data": "0xaffed0e0",
+                },"latest"]),
+            )
+            .await
+            .unwrap();
+
+        nonce
+    }
+
+    pub async fn send_op(&self, userOp: UserOperation, account: &mut SimpleAccount) -> String {
+        let rpc_url = "http://localhost:4337";
+        let provider = Provider::try_from(rpc_url).unwrap();
+        let result: String = provider
+            .request(
+                "eth_sendUserOperation",
+                json!([userOp, account.entry_point]),
+            )
+            .await
+            .unwrap();
+
+        if !account.deployed {
+            account.deployed = true;
+            let dir = self.key_store_path.join("smart_accounts");
+            let addr_str = "0x".to_owned() + &hex::encode(account.address);
+            let mut file = fs::File::create(&dir.join(&addr_str)).unwrap();
+            let contents = serde_json::to_string(&account).unwrap();
+            file.write_all(contents.as_bytes()).unwrap();
+        }
+        result
+    }
+
+    pub fn load_account(&self, smart_account_addr: String) -> SimpleAccount {
+        let dir = self
+            .key_store_path
+            .join("smart_accounts")
+            .join(smart_account_addr);
+        let toml_str = fs::read_to_string(dir).unwrap();
+        let account: SimpleAccount = serde_json::from_str(&toml_str).unwrap();
+        account
+    }
 }
 
 #[cfg(test)]
@@ -137,14 +247,9 @@ mod tests {
     pub fn test_create_account() {
         let wallet_config_path = PathBuf::from("wallet_config.toml");
         let wallet = Erc4337Wallet::new(wallet_config_path);
-        let owner = Address::from_str("5B38Da6a701c568545dCfcB03FcB875f56beddC4").unwrap();
+        let owner = Address::from_str("1F0BDb0533b9aB79c891E65aC3ad3df4cd164B50").unwrap();
         wallet.create_account(owner, Option::None);
     }
-
-    abigen!(
-        IUniswapV2Pair,
-        r#"[function getReserves() external view returns (uint112 reserve0, uint112 reserve1, uint32 blockTimestampLast)]"#
-    );
 
     #[tokio::test]
     pub async fn test_rpc() {
@@ -153,48 +258,35 @@ mod tests {
         let rpc_url = "http://localhost:4337";
         let provider = Provider::try_from(rpc_url).unwrap();
         let op = UserOperation::new();
-        let block_number: U64 = provider
+        let block_number: Result<GasQueryResult, ProviderError> = provider
             .request(
-                "eth_estimateUserOperationGas",
+                "eth_sendUserOperation",
                 json!([{"callData":"0xb61d27f60000000000000000000000007a531c4f680ff73ca991557f5ee274744a696517000000000000000000000000000000000000000000000000000000000000000a00000000000000000000000000000000000000000000000000000000000000600000000000000000000000000000000000000000000000000000000000000000",
-                "callGasLimit":"0x0",
+                "callGasLimit":44980,
                 "initCode":"0x3b65465fa21686034605f7cf4c9edc6c4ca133725fbfb9cf0000000000000000000000001f0bdb0533b9ab79c891e65ac3ad3df4cd164b50000000000000000000000000000000003932ea3bfa1f9fb389748e004491266c",
-                "maxFeePerGas":"0x0",
-                "maxPriorityFeePerGas":"0x0",
+                "maxFeePerGas":44980,
+                "maxPriorityFeePerGas":44980,
                 "nonce":"0x0","paymasterAndData":"0x",
-                "preVerificationGas": 44980,
+                "preVerificationGas": 45028,
                 "sender":"0x1795a0cd3df0fca0b3b0a3c4f7f8721839f2e2de",
                 "signature":"0x43b8da28f2e270442c1618c6594a8b9c3cc44fd321d6135339be632af153e1fa5a00d1b1336d40091ae887b0b8d2a8a6f20b8d9818435196082f38cc46e0bad11b",
-                "verificationGasLimit":"0xffffff"},
+                "verificationGasLimit":1500000},
                 "0x8944bd0fed9732f99c5a5a4b5d730a1b7f45783c"]),
             )
-            .await
-            .unwrap();
-        //let a = json!([op, "0x0576a174D229E3cFA37253523E645A78A0C91B57"]);
+            .await;
 
-        println!("{}", block_number);
-        //let provider = Arc::new(Provider::try_from(rpc_url).unwrap());
-        // let pair_address: Address = "0xA478c2975Ab1Ea89e8196811F51A7B7Ade33eB11"
-        //     .parse()
-        //     .unwrap();
-        // let uniswap = IUniswapV2Pair::new(pair_address, provider);
+        let r: GasQueryResult;
 
-        // let (reserve_0, reserve_1, blocktimestamp) = uniswap.get_reserves().call().await.unwrap();
-        // println!("{},{},{}", reserve_0, reserve_1, blocktimestamp);
-        // .request(
-        //     "eth_sendUserOperation",
-        //     json!([{"callData":"0xb61d27f60000000000000000000000007a531c4f680ff73ca991557f5ee274744a696517000000000000000000000000000000000000000000000000000000000000001000000000000000000000000000000000000000000000000000000000000000600000000000000000000000000000000000000000000000000000000000000000",
-        //     "callGasLimit":"0x9960199",
-        //     "initCode":"0xd25e3ec8f95ccc0428484493468715bcd7244eaa5fbfb9cf0000000000000000000000007a531c4f680ff73ca991557f5ee274744a69651700000000000000000000000000000000d2bc493ccba2b50e2f174221b608be81",
-        //     "maxFeePerGas":"0x97b9262d649",
-        //     "maxPriorityFeePerGas":"0x99682f009",
-        //     "nonce":"0x0","paymasterAndData":"0x",
-        //     "preVerificationGas":"0x99682f09",
-        //     "sender":"0x7c236bcc65196c8eef8144eb0b53919513106547",
-        //     "signature":"0x",
-        //     "verificationGasLimit":"1500000"},
-        //     "0x0576a174d229e3cfa37253523e645a78a0c91b57"]),
-        // )
+        match block_number {
+            Ok(gas_result) => println!("{:?}", gas_result),
+            Err(E) => match E {
+                ProviderError::JsonRpcClientError(mes) => {
+                    let res: String = mes.to_string();
+                    println!("{:?}", res);
+                }
+                _ => panic!("{}", E),
+            },
+        };
     }
 
     #[tokio::test]
@@ -211,11 +303,42 @@ mod tests {
             ),
         );
         wallet
-            .send_tx(
+            .fill_user_op(
                 &account,
                 "7A531C4F680fF73Ca991557F5Ee274744A696517".parse().unwrap(),
                 U256::from_dec_str("10").unwrap(),
+                12345.into(),
             )
             .await;
+    }
+
+    #[tokio::test]
+    pub async fn test_send() {
+        let wallet_config_path = PathBuf::from("wallet_config.toml");
+        let wallet = Erc4337Wallet::new(wallet_config_path);
+        let mut account = wallet.load_account("0xca45fe0684c78401e48c853fc911a93ef77a1b31".into());
+        let (userOp, ophash) = wallet
+            .fill_user_op(
+                &account,
+                "0x7A531C4F680fF73Ca991557F5Ee274744A696517"
+                    .parse()
+                    .unwrap(),
+                U256::from_dec_str("1000").unwrap(),
+                12345.into(),
+            )
+            .await;
+
+        let result = wallet.send_op(userOp, &mut account).await;
+        println!("{}", result);
+    }
+
+    #[tokio::test]
+    pub async fn test_nonce() {
+        let wallet_config_path = PathBuf::from("wallet_config.toml");
+        let wallet = Erc4337Wallet::new(wallet_config_path);
+        let nonce = wallet
+            .query_nonce("0xca45fe0684c78401e48c853fc911a93ef77a1b31".into())
+            .await;
+        println!("{}", nonce);
     }
 }

@@ -1,3 +1,4 @@
+#![allow(non_snake_case)]
 use ethers::abi::AbiEncode;
 use ethers::abi::Address;
 use ethers::contract::{EthAbiCodec, EthAbiType};
@@ -127,7 +128,7 @@ impl UserOperation {
         self
     }
 
-    ///For ighter signature scheme
+    ///For lighter signature scheme
     pub fn pack_into(mut self) -> Vec<u8> {
         let mut bytes = self.encode();
         bytes.resize(bytes.len() - 32, 0);
@@ -156,8 +157,12 @@ mod tests {
             .verification_gas_limit(999i32)
             .pre_verification_gas(999i32)
             .max_fee_per_gas(999i32)
-            .max_priority_fee_per_gas(999i32);
+            .max_priority_fee_per_gas(999i32)
+            .paymaster_and_data(Bytes::from_str("0x12345678").unwrap())
+            .signature(Bytes::from_str("0x0000").unwrap());
 
+        user_op = user_op.signature(Bytes::default());
+        //let encode_byte = user_op.encode();
         let abiencode_op = user_op.pack_into();
         let b = Bytes::try_from(abiencode_op).unwrap().to_string();
         print!("{:?}", b);

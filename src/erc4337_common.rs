@@ -2,7 +2,7 @@ use crate::user_opertaion;
 use ethers::prelude::{Address, U256};
 use serde::ser::SerializeSeq;
 use serde::{Deserialize, Serialize};
-
+use std::fmt;
 #[derive(Serialize)]
 pub struct UserOperationRequest {
     pub jsonrpc: i8,
@@ -23,4 +23,18 @@ pub struct GasQueryResult {
     pub preVerificationGas: u128,
     pub verificationGas: u128,
     pub callGasLimit: u128,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ERC4337Error {
+    pub code: i64,
+    pub message: String,
+    pub data: String,
+}
+
+impl std::error::Error for ERC4337Error {}
+impl fmt::Display for ERC4337Error {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "code: {}, message: {}", self.code, self.message)
+    }
 }
