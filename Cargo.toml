@@ -23,7 +23,18 @@ eth-keystore = "0.4.1"
 toml = "0.5"
 rpassword = "6.0"
 dialoguer = "0.10"
+num-bigint = "0.4.3"
 tokio = { version = "1.18.2", features = ["macros"] }
+pedersen-hash-rs = {git="https://github.com/LYC386/pedersen-hash-rs.git"}
+babyjubjub-rs = "0.0.10"
+ff_ce = "0.11"
+mimc-sponge-rs = { git = "https://github.com/tzilkha/mimc-sponge-rs" }
+sparse-merkle-tree = { git = "https://github.com/LYC386/sparse-merkle-tree" }
+ark-circom = { git = "https://github.com/LYC386/circom-compat" }
+ark-bn254 = { version = "0.4.0" }
+ark-groth16 = { version = "0.4.0", default-features = false, features = ["parallel"] }
+tempfile = "3.5.0"
+ethers-core = "1.0.2"
 
 [build-dependencies]
 bindgen = "0.53.1"
