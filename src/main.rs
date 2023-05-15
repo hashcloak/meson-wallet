@@ -5,7 +5,6 @@ mod erc4337_common;
 mod erc4337wallet;
 mod error;
 mod meson_common;
-mod tornado_mimc;
 mod tornado_util;
 mod user_opertaion;
 mod wallet;

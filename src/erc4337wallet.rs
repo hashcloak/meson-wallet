@@ -116,7 +116,7 @@ impl Erc4337Wallet {
             .call_gas_imit(gas_info.callGasLimit)
             .verification_gas_limit(50000)
             .pre_verification_gas(100000)
-            .max_fee_per_gas(1000000);
+            .max_fee_per_gas(100000000);
 
         //set signature to empty bytes for signing
         userOp = userOp.signature(Bytes::default());
@@ -247,8 +247,15 @@ mod tests {
     pub fn test_create_account() {
         let wallet_config_path = PathBuf::from("wallet_config.toml");
         let wallet = Erc4337Wallet::new(wallet_config_path);
-        let owner = Address::from_str("1F0BDb0533b9aB79c891E65aC3ad3df4cd164B50").unwrap();
-        wallet.create_account(owner, Option::None);
+        let owner = Address::from_str("FFcf8FDEE72ac11b5c542428B35EEF5769C409f0").unwrap();
+        wallet.create_account(
+            owner,
+            Some(
+                "0xe78A0F7E598Cc8b0Bb87894B0F60dD2a88d6a8Ab"
+                    .parse()
+                    .unwrap(),
+            ),
+        );
     }
 
     #[tokio::test]
@@ -297,7 +304,7 @@ mod tests {
         let account = wallet.create_account(
             owner,
             Option::Some(
-                "0x8944bd0FeD9732f99c5a5A4B5d730a1B7f45783c"
+                "0xe78A0F7E598Cc8b0Bb87894B0F60dD2a88d6a8Ab"
                     .parse()
                     .unwrap(),
             ),
@@ -305,9 +312,11 @@ mod tests {
         wallet
             .fill_user_op(
                 &account,
-                "7A531C4F680fF73Ca991557F5Ee274744A696517".parse().unwrap(),
+                "0x0000000000000000000000000000000000000001"
+                    .parse()
+                    .unwrap(),
                 U256::from_dec_str("10").unwrap(),
-                12345.into(),
+                5777.into(),
             )
             .await;
     }
@@ -316,11 +325,11 @@ mod tests {
     pub async fn test_send() {
         let wallet_config_path = PathBuf::from("wallet_config.toml");
         let wallet = Erc4337Wallet::new(wallet_config_path);
-        let mut account = wallet.load_account("0xca45fe0684c78401e48c853fc911a93ef77a1b31".into());
+        let mut account = wallet.load_account("0x62a6d60c2ccafa26eb136e6705b30fe14faffabc".into());
         let (userOp, ophash) = wallet
             .fill_user_op(
                 &account,
-                "0x7A531C4F680fF73Ca991557F5Ee274744A696517"
+                "0x0000000000000000000000000000000000000001"
                     .parse()
                     .unwrap(),
                 U256::from_dec_str("1000").unwrap(),

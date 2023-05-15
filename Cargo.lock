@@ -2707,6 +2707,8 @@ dependencies = [
  "babyjubjub-rs",
  "base64ct",
  "bindgen",
+ "bitvec 1.0.0",
+ "blake-hash",
  "ctr 0.9.1",
  "dialoguer 0.10.1",
  "eth-keystore 0.4.1",
@@ -2716,14 +2718,12 @@ dependencies = [
  "futures",
  "mimc-sponge-rs",
  "num-bigint 0.4.3",
- "pedersen-hash-rs",
  "rand 0.8.5",
  "rpassword",
  "scrypt 0.8.1",
  "serde",
  "serde_json",
  "sha3",
- "sparse-merkle-tree",
  "tempdir",
  "tempfile",
  "thiserror",
@@ -3106,18 +3106,6 @@ dependencies = [
  "hmac",
  "password-hash 0.4.2",
  "sha2 0.10.6",
-]
-
-[[package]]
-name = "pedersen-hash-rs"
-version = "0.1.0"
-source = "git+https://github.com/LYC386/pedersen-hash-rs.git#bc07ff2dc5f6c4f7c6222835852b901afa35ae58"
-dependencies = [
- "babyjubjub-rs",
- "bitvec 1.0.0",
- "blake-hash",
- "ff_ce",
- "num-bigint 0.4.3",
 ]
 
 [[package]]
@@ -4145,15 +4133,6 @@ dependencies = [
  "lalrpop-util",
  "phf",
  "unicode-xid",
-]
-
-[[package]]
-name = "sparse-merkle-tree"
-version = "0.1.0"
-source = "git+https://github.com/LYC386/sparse-merkle-tree#af5ac7ddc39499be0ff317a39cff9c3efc6ddd00"
-dependencies = [
- "ff_ce",
- "mimc-sponge-rs",
 ]
 
 [[package]]

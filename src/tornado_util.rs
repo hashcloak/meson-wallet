@@ -7,17 +7,18 @@ use ethers::prelude::{abigen, Bytes, Filter, Middleware, Provider, U256};
 use ethers::utils;
 use ff_ce::{from_hex, Field, PrimeField};
 use mimc_sponge_rs::Fr as mimc_fr;
-use num_bigint::BigInt;
-use pedersen_hash_rs::pedersen_hash;
+use num_bigint::{BigInt, Sign};
 use rand::rngs::StdRng;
 use rand::{thread_rng, Rng, SeedableRng};
-use sparse_merkle_tree::{default_hash, MerkleTree};
+
 use std::str::FromStr;
 use std::sync::Arc;
 
 type GrothBn = Groth16<Bn254>;
 
-abigen!(Tornado, "src/ETHTornado.json");
+pub mod pedersen_hash;
+pub mod sparse_merkle_tree;
+// abigen!(Tornado, "src/ETHTornado.json");
 #[derive(Debug)]
 pub struct Deposit {
     pub nullifier: BigInt,
@@ -45,11 +46,14 @@ impl Deposit {
         ]
         .concat();
 
-        let commitment = decompress_point(pedersen_hash(&preimage)).unwrap().x;
-        let commitment_hex = format!("0x{}", ff_ce::to_hex(&commitment));
-        let nullifier_hash = decompress_point(pedersen_hash(&nullifier_random_bytes))
+        let commitment = decompress_point(pedersen_hash::pedersen_hash(&preimage))
             .unwrap()
             .x;
+        let commitment_hex = format!("0x{}", ff_ce::to_hex(&commitment));
+        let nullifier_hash =
+            decompress_point(pedersen_hash::pedersen_hash(&nullifier_random_bytes))
+                .unwrap()
+                .x;
         let nullifier_hex = format!("0x{}", ff_ce::to_hex(&nullifier_hash));
 
         Deposit {
@@ -63,21 +67,20 @@ impl Deposit {
         }
     }
 
-    pub fn gen_deposit_tx(&self, currency: Option<String>, amount: String) -> Vec<u8> {
+    pub fn gen_deposit_tx(&self, currency: Option<String>, amount: String, net_id: u64) -> Vec<u8> {
         let currency = currency.unwrap_or("eth".into());
         let preimage_hex = utils::hex::encode(&self.preimage);
-        let net_id = 1;
-        let note_string = format!("tornado-{currency}-{amount}-{net_id}-{preimage_hex}");
+        let note_string = format!("tornado-{currency}-{amount}-{net_id}-0x{preimage_hex}");
         let value = utils::parse_ether(amount).unwrap();
         let deposit_sig = Bytes::from_str(DEPOSIT_SIGNATURE).unwrap().to_vec();
         let commitment_vec = Bytes::from_str(&self.commitment_hex).unwrap().to_vec();
         let tx_vec = [deposit_sig, commitment_vec].concat();
-
+        println!("{}", note_string);
         tx_vec
     }
 }
 
-pub async fn generate_merkle_proof(deposit: Deposit) -> (Vec<mimc_fr>, Vec<u128>, mimc_fr) {
+pub async fn generate_merkle_proof(deposit: &Deposit) -> (Vec<mimc_fr>, Vec<u128>, mimc_fr) {
     //todo: fetch addr from env of cfg
     let tornado_addr: Address = TORNADO_ADDRESS.parse().unwrap();
     let rpc_url = "http://localhost:8545";
@@ -110,16 +113,59 @@ pub async fn generate_merkle_proof(deposit: Deposit) -> (Vec<mimc_fr>, Vec<u128>
         }
     }
     println!("{}", index);
-    let tree = MerkleTree::new(MERKLE_LEVEL, None, default_hash, Some(leaves));
+    let tree = sparse_merkle_tree::MerkleTree::new(
+        MERKLE_LEVEL,
+        None,
+        sparse_merkle_tree::default_hash,
+        Some(leaves),
+    );
     let root = tree.root();
     let (pathElements, pathIndices) = tree.path(index);
     return (pathElements, pathIndices, root);
 }
 
-pub fn generate_proof(deposit: Deposit) {
+pub async fn generate_proof(
+    deposit: Deposit,
+    recipient: Address,
+    relayer: Option<Address>,
+    fee: Option<U256>,
+    refund: Option<U256>,
+) {
+    let relayer = match relayer {
+        Some(a) => a,
+        None => Address::from_str("0x0000000000000000000000000000000000000000").unwrap(),
+    };
+    let fee = match fee {
+        Some(a) => a,
+        None => 0i32.into(),
+    };
+    let refund = match refund {
+        Some(a) => a,
+        None => 0i32.into(),
+    };
     let cfg =
         CircomConfig::<Bn254>::new("src/circuits/withdraw.wasm", "src/circuits/withdraw.r1cs")
             .unwrap();
+    let (pathElements, pathIndices, root) = generate_merkle_proof(&deposit).await;
+    let mut builder = CircomBuilder::new(cfg);
+    let bi_root = BigInt::from_bytes_be(
+        Sign::Plus,
+        &utils::hex::decode(ff_ce::to_hex(&root)).unwrap(),
+    );
+    let bi_nullifier_hash = BigInt::from_bytes_be(
+        Sign::Plus,
+        &utils::hex::decode(ff_ce::to_hex(&deposit.nullifier_hash)).unwrap(),
+    );
+    let bi_recipient = BigInt::from_bytes_be(Sign::Plus, recipient.as_bytes());
+    let bi_relayer = BigInt::from_bytes_be(Sign::Plus, relayer.as_bytes());
+    let bi_fee = BigInt::from_bytes_be(Sign::Plus, &fee.encode());
+    let bi_refund = BigInt::from_bytes_be(Sign::Plus, &refund.encode());
+    builder.push_input("root", bi_root);
+    builder.push_input("nullifierHash", bi_nullifier_hash);
+    builder.push_input("recipient", bi_recipient);
+    builder.push_input("relayer", bi_relayer);
+    builder.push_input("fee", bi_fee);
+    builder.push_input("refund", bi_refund);
 }
 
 #[cfg(test)]
@@ -143,7 +189,7 @@ mod tests {
     pub fn test_deposit() {
         let d = Deposit::new();
 
-        let tx = d.gen_deposit_tx(None, "0.1".into());
+        let tx = d.gen_deposit_tx(None, "0.1".into(), 1683880318909);
         println!("{:?}", tx);
     }
 
@@ -180,7 +226,7 @@ mod tests {
     #[tokio::test]
     pub async fn test_merkle() {
         let d = Deposit::new();
-        generate_merkle_proof(d).await;
+        generate_merkle_proof(&d).await;
     }
 
     #[tokio::test]
@@ -208,7 +254,7 @@ mod tests {
         //let rpc_url = "https://node.stackup.sh/v1/rpc/9c21ff1cba3a5407d43324bfc6718044de9203b2b6fb09aac8b52a7d7496bdf5";
         let rpc_url = "http://localhost:8545";
         let deposit = Deposit::new();
-        let tx = deposit.gen_deposit_tx(None, "0.1".into());
+        let tx = deposit.gen_deposit_tx(None, "0.1".into(), 1337);
         let data = "0x".to_owned() + &utils::hex::encode(tx);
         let provider = Provider::try_from(rpc_url).unwrap();
         let r: String = provider
@@ -247,7 +293,17 @@ mod tests {
 
     #[test]
     pub fn test_proof() {
-        let deposit = Deposit::new();
-        generate_proof(deposit);
+        // let deposit = Deposit::new();
+        // generate_proof(deposit);
+        // let sl = utils::hex::decode("ff00").unwrap();
+        // println!("{sl:?}");
+        // let a = BigInt::from_bytes_be(num_bigint::Sign::Plus, &sl);
+        // println!("{a}");
+        // let addr = Address::from_str("0x0000000000000000000000000000000000001234").unwrap();
+        // let a = addr.as_bytes();
+        // println!("{a:?}");
+        // let a = U256::from(0xff00);
+        // let s = a.encode();
+        // println!("{s:?}");
     }
 }
