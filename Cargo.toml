@@ -35,6 +35,8 @@ tempfile = "3.5.0"
 ethers-core = "1.0.2"
 bitvec = "1"
 blake-hash = "0.4.1"
+ark-snark = "0.4.0"
+ark-serialize = "0.4.2"
 
 [build-dependencies]
 bindgen = "0.53.1"
