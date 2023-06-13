@@ -16,6 +16,7 @@ use std::sync::Arc;
 type GrothBn = Groth16<Bn254>;
 use std::fs;
 
+pub mod parse_key;
 pub mod pedersen_hash;
 pub mod sparse_merkle_tree;
 // abigen!(Tornado, "src/ETHTornado.json");
@@ -31,7 +32,7 @@ pub struct Deposit {
 }
 const DEPOSIT_SIGNATURE: &str = "0xb214faa5";
 const WITHDRAW_SIGNATURE: &str = "0x21a0adb6";
-const TORNADO_ADDRESS: &str = "0xFfB729553fEA430AdDab48D8F9f42d5b6CA87270";
+const TORNADO_ADDRESS: &str = "0x46366eDEBBf7c25D50903F5f4fC87fc8C226193e";
 const MERKLE_LEVEL: usize = 20;
 impl Deposit {
     pub fn new() -> Self {
@@ -252,10 +253,10 @@ pub async fn generate_proof(
     let inputs = circom.get_public_inputs().unwrap();
     let proof = GrothBn::prove(&params, circom, &mut rng).unwrap();
     let pvk = GrothBn::process_vk(&params.vk).unwrap();
-    // let verified = GrothBn::verify_with_processed_vk(&pvk, &inputs, &proof).unwrap();
-    // println!("result:{}", verified);
+    //let verified = GrothBn::verify_with_processed_vk(&pvk, &inputs, &proof).unwrap();
+    //println!("result:{}", verified);
 
-    let vk: ethereum::VerifyingKey = params.vk.into();
+    //let vk: ethereum::VerifyingKey = params.vk.into();
 
     let a = ethereum::G1::from(&proof.a);
     let a_x = a.x.encode();
@@ -296,10 +297,12 @@ fn to_be_bytes(u64_4_in: &[u64; 4]) -> Vec<u8> {
 
 mod tests {
     use super::*;
+    use ark_bn254::G1Affine;
     use ethers::{
         core::types::{Address, Filter, H160, H256, U256},
         providers::{Http, Middleware, Provider},
     };
+    use num_bigint::BigUint;
     use serde_json::json;
     use std::sync::Arc;
 
@@ -348,7 +351,7 @@ mod tests {
         let r: String = provider
             .request(
                 "eth_sendRawTransaction",
-                json!(["0x02f89b82053980853a35294400853a352944008398968094ffb729553fea430addab48d8f9f42d5b6ca8727088016345785d8a0000a4b214faa5150b3bedf67a73a81d271167a484862938a1c912c62104f4c0ab360476cb8fadc001a00bb94b11f582328146245d298650e40acd53f221447242f96d123f142f083200a0625cb43f9fa9e2d3949c1545967f71c51838bb33cb9a94f37a9ac93431ac365d"]),
+                json!(["0x02f89b82053980853a35294400853a35294400839896809446366edebbf7c25d50903f5f4fc87fc8c226193e88016345785d8a0000a4b214faa5002f25435bee072decfa513e31cb6d1fdcaefc1a627e732408c41e6795aee0b7c080a0dac440d5befa923f1ef39233516e3e1f46ce5f0b561de7990902984cfa396f5aa0559bfa73b425ea9ae9d0fe24161c437e5f461eb1a381d689069ef7d58e64f4a1"]),
             )
             .await
             .unwrap();
@@ -358,8 +361,8 @@ mod tests {
     #[tokio::test]
     pub async fn test_proof() {
         let rpc_url = "http://localhost:8545";
-        let r = Address::from_str("0xBa0A599E2cc8f0C45FA2E7cd9Ab2F14751c8b84e").unwrap();
-        let note = "tornado-eth-0.1-1337-0xf6baa0f9082cfe4df59e4829ada89cedd9b431068a81d3942d2ace2fc62b27c8fd2ae8d3d1cdaaa71005fddd7cc7bbde27378b46e6bc152fb8be040de146";
+        let r = Address::from_str("0xeBfe77687E345B175eAD979B378292664C53d1E9").unwrap();
+        let note = "tornado-eth-0.1-1337-0x544e61c5c834de841ae4a5d973d699b00ec302d4c6bb2b85bb58f18cd0c989c21db9bb4d7adf82738a79256b2c975c50645424982b469f326bf67239b5e9";
         let tx = Deposit::parse_and_withdraw(note, r, None, None, None).await;
         let data = "0x".to_owned() + &utils::hex::encode(tx);
         let provider = Provider::try_from(rpc_url).unwrap();
@@ -390,10 +393,24 @@ mod tests {
         let r: String = provider
             .request(
                 "eth_sendRawTransaction",
-                json!(["0x02f9027382053980843b9aca00841f7d07e8830f424094ffb729553fea430addab48d8f9f42d5b6ca8727080b9020421a0adb600000000000000000000000000000000000000000000000000000000000000e01d9a72c1fba935176b8269d6756a82fff5026cc95d943a6b3bb74ade007033b90a5a23c91211e5567aa5ebb5b9ab46b1d74fcca0a79a70333e20622ea129aaa9000000000000000000000000ba0a599e2cc8f0c45fa2e7cd9ab2f14751c8b84e00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001001f79237b93e8ad6a69e733b99a6c1deab4257aee64e6e541237bd675562637f20cbb4263ce3381cbc4fbb65b5fe1ec10f779fc98448933032a5de1bf56b5d3b500ce9b7ed884f5b7a0a477a1e7791b83c302bdee9d5046df31733f4d97e271ff0960f3714a1034714f2af01b871ad79f705da6c4f293126a89ba2ac9ca25c1512bec55ad93b9b456d0dd44f38dc05fc618f00e04443862c47b0e644f45dd128601a77d84406d7c64ef4fa99a8e2d14a1a4b3d903c841222c068580eb52e7ed452bcd4378bd510051dca5aecd3df95d9550f551a75960b352876ba1ecc5f74f5a1e75fe2185e237bcbe723849be3429116b2c163b9d15a8e676bb8d3c34e1d44ec080a01c8287ef8c14a02efe72f2e2412c5c3d83d24f0ad09e87b270bccd13b989029fa01e1562d7b24954622238f425ddadf94b7f71d2908e938d44672d06136bac769c"]),
+                json!(["0x02f9027382053980843b9aca00841f7d07e8830f42409446366edebbf7c25d50903f5f4fc87fc8c226193e80b9020421a0adb600000000000000000000000000000000000000000000000000000000000000e0050c9dd6b507406a49bf7adda0e36d403e7358a572e691ab09fa1276683e2b302825a7cef0ea7d835cacb2a0aec17311272ae4fe5cab80135fb929858ae45d33000000000000000000000000ebfe77687e345b175ead979b378292664c53d1e900000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001002d99fa30ea41c43f8e222ab94acb8766062dc4f7f8b1665cdfbbf6db8b92334216771bcbf802df4d347289ed7503d383fb0ddb07808dd9bff09a240ba3dc28c30ff84c4e3ba3c4d0cb7629655a0ecd92a096c7cf2d659fa27930c9ec71a0ff3c1817c378799fadbf3535945060fff2f8fc0dcd3759b16f63ae921062aa382190064d97666c2bc15da5346d455d9bce928c15f7d2c1205b73c812d81056fae765248c19c9aa8cda323ed67a8283777de2496b69ec4b26156335a8be387872e417215cde6d482d3eda5fc622f6389cfe77e3468caef5455a265eeefbac4cb90c2804f90986e5a352f37f8015e3f2297f69ba675bfe0bcb971bd0022e8ac5c20cd3c080a0a3c6790907e0bee49e17d91edd5335be66b5c3778ccb4a5c8c2187c179dd449da07334d8222b8d44c643358329468350e76aa9bfe31228a76d997f133584b1ffff"]),
             )
             .await
             .unwrap();
         println!("{r}");
+    }
+
+    #[test]
+    pub fn test_key() {
+        // use ark_bn254::{Bn254, Fq, Fq2, Fr, G1Affine, G2Affine};
+
+        // let compressed_bytes = fs::read("src/circuits/ProvingKey").unwrap();
+        // let params =
+        //     ProvingKey::<Bn254>::deserialize_compressed_unchecked(&*compressed_bytes).unwrap();
+        // println!("{:#?}", params.a_query.len());
+        // println!("{:#?}", params.l_query.len());
+        // let k = BigUint::from_str("10").unwrap();
+        // let a = params.l_query[2];
+        // G1Affine::new(Fq::from(k), Fq::from(k));
     }
 }
