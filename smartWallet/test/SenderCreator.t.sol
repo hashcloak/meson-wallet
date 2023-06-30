@@ -21,8 +21,8 @@ contract SenderCreatorTest is Test {
         SenderCreator sc = new SenderCreator();
         // address owner = vm.addr(1);
         // uint salt = 123;
-        address owner = 0x7A531C4F680fF73Ca991557F5Ee274744A696517;
-        uint salt = 0xd2bc493ccba2b50e2f174221b608be81;
+        address owner = 0x8447f61c8D1AE66259329848c328E127A453fb52;
+        uint salt = 0x26d430811a98b42981566c60913bb98c;
         address sender1 = af.getAddress(owner, salt);
         //assert sender1 hasn't been created
         assertEq(sender1.code.length == 0, true);

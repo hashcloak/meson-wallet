@@ -7,10 +7,10 @@ const CREATE_ACCOUNT_SIGNATURE: &str = "0x5fbfb9cf";
 const WALLET_LOGIC_INITIALIZE_SIGNATURE: &str = "0xc4d66de8";
 //const ACCOUNT_FACTORY_ADDRESS: &str = "0xd25E3EC8F95ccc0428484493468715BCd7244eaA"; //goerli test only
 //const ACCOUNT_IMPLEMENTATION: &str = "0xB75aFebb04D12a68b4310A3f6CBeC0957c4D2e91"; //goerli test only //wallet logic address
-// const ACCOUNT_FACTORY_ADDRESS: &str = "0x3B65465Fa21686034605f7cf4C9EdC6c4Ca13372"; //loacl test only
-// const ACCOUNT_IMPLEMENTATION: &str = "0x128B7B0390557933891FbE6206D713E89C932c2c"; //local test only //wallet logic address
-const ACCOUNT_FACTORY_ADDRESS: &str = "0x5b1869D9A4C187F2EAa108f3062412ecf0526b24"; //ganache test only
-const ACCOUNT_IMPLEMENTATION: &str = "0x3c63250aFA2470359482d98749f2d60D2971c818"; //ganache test only //wallet logic address
+//const ACCOUNT_FACTORY_ADDRESS: &str = "0x5b1869D9A4C187F2EAa108f3062412ecf0526b24"; //ganache test only
+//const ACCOUNT_IMPLEMENTATION: &str = "0x3c63250aFA2470359482d98749f2d60D2971c818"; //ganache test only //wallet logic address
+const ACCOUNT_FACTORY_ADDRESS: &str = "0x3B65465Fa21686034605f7cf4C9EdC6c4Ca13372"; //loacl test only
+const ACCOUNT_IMPLEMENTATION: &str = "0x128B7B0390557933891FbE6206D713E89C932c2c"; //local test only //wallet logic address
 
 pub fn create_init_code(owner: Address, salt: U256) -> Vec<u8> {
     let mut signature = Bytes::from_str(CREATE_ACCOUNT_SIGNATURE).unwrap().to_vec();
@@ -59,12 +59,12 @@ mod tests {
     #[test]
     fn test_create2() {
         let addr = create2addr(
-            Address::from_str("0x5B38Da6a701c568545dCfcB03FcB875f56beddC4").unwrap(),
-            U256::from_dec_str("100").unwrap(),
+            Address::from_str("0x8447f61c8D1AE66259329848c328E127A453fb52").unwrap(),
+            U256::from_str("0x26d430811a98b42981566c60913bb98c").unwrap(),
         );
         assert_eq!(
             encode_hex(&addr.0),
-            String::from("26afe755947b80f3ca127b73f98da6f8c1fba202")
+            String::from("f7a943484b0622462ff28a01537b3ef45f51fc21")
         );
     }
 

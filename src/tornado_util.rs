@@ -32,7 +32,7 @@ pub struct Deposit {
 }
 const DEPOSIT_SIGNATURE: &str = "0xb214faa5";
 const WITHDRAW_SIGNATURE: &str = "0x21a0adb6";
-const TORNADO_ADDRESS: &str = "0x46366eDEBBf7c25D50903F5f4fC87fc8C226193e";
+pub const TORNADO_ADDRESS: &str = "0x88bf8F944127B037585Bcb82c674b5Cefdc56Ab9";
 const MERKLE_LEVEL: usize = 20;
 impl Deposit {
     pub fn new() -> Self {
@@ -69,7 +69,7 @@ impl Deposit {
         }
     }
 
-    pub fn gen_deposit_tx(&self, currency: Option<String>, amount: String, net_id: u64) -> Vec<u8> {
+    pub fn gen_deposit_tx(&self, currency: Option<&str>, amount: &str, net_id: u64) -> Vec<u8> {
         let currency = currency.unwrap_or("eth".into());
         let preimage_hex = utils::hex::encode(&self.preimage);
         let note_string = format!("tornado-{currency}-{amount}-{net_id}-0x{preimage_hex}");
@@ -253,8 +253,8 @@ pub async fn generate_proof(
     let inputs = circom.get_public_inputs().unwrap();
     let proof = GrothBn::prove(&params, circom, &mut rng).unwrap();
     let pvk = GrothBn::process_vk(&params.vk).unwrap();
-    //let verified = GrothBn::verify_with_processed_vk(&pvk, &inputs, &proof).unwrap();
-    //println!("result:{}", verified);
+    // let verified = GrothBn::verify_with_processed_vk(&pvk, &inputs, &proof).unwrap();
+    // println!("result:{}", verified);
 
     //let vk: ethereum::VerifyingKey = params.vk.into();
 
@@ -328,13 +328,14 @@ mod tests {
             .request(
                 "eth_signTransaction",
                 json!([{
-                    "from":"0xC776A63D28fDCCe9b2c7fb0Ad07FcEe95298bD46",
+                    "from":"0xb1b2C37fA8CB7a19d6E66D21460736a8D74A7845",
                     "to":TORNADO_ADDRESS,
-                    "gas":10000000,
-                    "value":100000000000000000i64,
-                    "maxFeePerGas": 250000000000i64,
-                    "maxPriorityFeePerGas": 250000000000i64,
+                    "gas":"0x989680",
+                    "value":"0x16345785D8A0000",
+                    "maxFeePerGas": "0xEE6B280",
+                    "maxPriorityFeePerGas": "0x1",
                     "data": data,
+                    "nonce": "0x8",
                 }]),
             )
             .await

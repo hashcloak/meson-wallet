@@ -2,6 +2,7 @@
 use crate::cli;
 use crate::create_sender_util::{create2addr, create_init_code};
 use crate::erc4337_common::{ERC4337Error, GasQueryResult};
+use crate::tornado_util::Deposit;
 use crate::user_opertaion::UserOperation;
 use ethers::abi::AbiEncode;
 use ethers::prelude::k256::ecdsa::SigningKey;
@@ -82,6 +83,7 @@ impl Erc4337Wallet {
         to: Address,
         amount: U256,
         chain_id: U256,
+        data: Option<Vec<u8>>,
     ) -> (UserOperation, String) {
         let mut userOp = UserOperation::new();
         //only include initcode if not deployed yet
@@ -102,7 +104,11 @@ impl Erc4337Wallet {
 
         //create calldata
         let mut func_signature = Bytes::from_str(EXECUTE_SIGNATURE).unwrap().to_vec();
-        let mut param = AbiEncode::encode((to, amount, Bytes::default()));
+        let mut param;
+        match data {
+            Some(n) => param = AbiEncode::encode((to, amount, Bytes::from(n))),
+            None => param = AbiEncode::encode((to, amount, Bytes::default())),
+        }
         let call_data = [func_signature, param].concat();
         userOp = userOp.call_data(call_data);
         userOp = userOp.verification_gas_limit(0xffffff);
@@ -112,11 +118,14 @@ impl Erc4337Wallet {
         userOp = userOp.signature(Bytes::from_str("0x43b8da28f2e270442c1618c6594a8b9c3cc44fd321d6135339be632af153e1fa5a00d1b1336d40091ae887b0b8d2a8a6f20b8d9818435196082f38cc46e0bad11b").unwrap());
         let gas_info = self.query_gas_info(account, &userOp).await;
         println!("{gas_info:?}");
+
+        //shoud set the gas price from gas_info (current stackup version doesn't work)
         userOp = userOp
             .call_gas_imit(gas_info.callGasLimit)
-            .verification_gas_limit(50000)
-            .pre_verification_gas(100000)
-            .max_fee_per_gas(100000000);
+            .verification_gas_limit(500000)
+            .pre_verification_gas(1000000)
+            .max_fee_per_gas(3500000000u32)
+            .max_priority_fee_per_gas(220000000);
 
         //set signature to empty bytes for signing
         userOp = userOp.signature(Bytes::default());
@@ -145,6 +154,44 @@ impl Erc4337Wallet {
         let hash_str = hex::encode(op_hash);
         println!("{userOp:?}");
         (userOp, hash_str)
+    }
+
+    pub async fn fill_tornado_deposit_user_op(
+        &self,
+        eth_amount: &str,
+        net_id: u64,
+        account: &SimpleAccount,
+        tornado_addr: Address,
+    ) -> (UserOperation, String) {
+        let tor_deposit = Deposit::new();
+        let tx = tor_deposit.gen_deposit_tx(None, eth_amount, net_id);
+        let (user_op, hash_str) = self
+            .fill_user_op(
+                account,
+                tornado_addr,
+                ethers::utils::parse_ether(eth_amount).unwrap(),
+                net_id.into(),
+                Some(tx),
+            )
+            .await;
+
+        (user_op, hash_str)
+    }
+
+    pub async fn fill_tornado_withdraw_user_op(
+        &self,
+        tor_note: &str,
+        recipient: Address,
+        net_id: u64,
+        account: &SimpleAccount,
+        tornado_addr: Address,
+    ) -> (UserOperation, String) {
+        let tx = Deposit::parse_and_withdraw(tor_note, recipient, None, None, None).await;
+        let (user_op, hash_str) = self
+            .fill_user_op(account, tornado_addr, 0.into(), net_id.into(), Some(tx))
+            .await;
+
+        (user_op, hash_str)
     }
 
     pub fn light_sign(
@@ -236,6 +283,8 @@ impl Erc4337Wallet {
 
 #[cfg(test)]
 mod tests {
+    use crate::tornado_util;
+
     use super::*;
     use ethers::prelude::*;
     use ethers::utils::__serde_json::json;
@@ -247,11 +296,11 @@ mod tests {
     pub fn test_create_account() {
         let wallet_config_path = PathBuf::from("wallet_config.toml");
         let wallet = Erc4337Wallet::new(wallet_config_path);
-        let owner = Address::from_str("FFcf8FDEE72ac11b5c542428B35EEF5769C409f0").unwrap();
+        let owner = Address::from_str("1f0bdb0533b9ab79c891e65ac3ad3df4cd164b50").unwrap();
         wallet.create_account(
             owner,
             Some(
-                "0xe78A0F7E598Cc8b0Bb87894B0F60dD2a88d6a8Ab"
+                "0x8944bd0FeD9732f99c5a5A4B5d730a1B7f45783c"
                     .parse()
                     .unwrap(),
             ),
@@ -317,6 +366,7 @@ mod tests {
                     .unwrap(),
                 U256::from_dec_str("10").unwrap(),
                 5777.into(),
+                None,
             )
             .await;
     }
@@ -325,19 +375,56 @@ mod tests {
     pub async fn test_send() {
         let wallet_config_path = PathBuf::from("wallet_config.toml");
         let wallet = Erc4337Wallet::new(wallet_config_path);
-        let mut account = wallet.load_account("0x62a6d60c2ccafa26eb136e6705b30fe14faffabc".into());
+        let mut account = wallet.load_account("0xdc56639f24a65e7a5091d16c9dec84442af924e7".into());
         let (userOp, ophash) = wallet
             .fill_user_op(
                 &account,
-                "0x0000000000000000000000000000000000000001"
+                "0x0000000000000000000000000000000000000006"
                     .parse()
                     .unwrap(),
-                U256::from_dec_str("1000").unwrap(),
+                U256::from_dec_str("10").unwrap(),
                 12345.into(),
+                None,
             )
             .await;
 
         let result = wallet.send_op(userOp, &mut account).await;
+        println!("{}", result);
+    }
+
+    #[tokio::test]
+
+    pub async fn test_tornado_deposit() {
+        let wallet_config_path = PathBuf::from("wallet_config.toml");
+        let wallet = Erc4337Wallet::new(wallet_config_path);
+        let mut account = wallet.load_account("0xca45fe0684c78401e48c853fc911a93ef77a1b31".into());
+        let (user_op, op_hash) = wallet
+            .fill_tornado_deposit_user_op(
+                "0.1",
+                12345,
+                &account,
+                tornado_util::TORNADO_ADDRESS.parse().unwrap(),
+            )
+            .await;
+        let result = wallet.send_op(user_op, &mut account).await;
+        println!("{}", result);
+    }
+
+    #[tokio::test]
+    pub async fn test_tornado_withdraw() {
+        let wallet_config_path = PathBuf::from("wallet_config.toml");
+        let wallet = Erc4337Wallet::new(wallet_config_path);
+        let mut account = wallet.load_account("0xca45fe0684c78401e48c853fc911a93ef77a1b31".into());
+        let (user_op, op_hash) = wallet
+        .fill_tornado_withdraw_user_op(
+            "tornado-eth-0.1-12345-0x10fe361cf9e3c8fc040dee1dfb71c41fb06a500e5a8fc2f1dc5b140607c9b656069573d13ab0d66ca39a003e5901aa63efbdf5939d242a01b60534ef89b8",
+             "0x0000000000000000000000000000000000000007".parse().unwrap(),
+              12345,
+               &account,
+                tornado_util::TORNADO_ADDRESS.parse().unwrap(),
+            )
+            .await;
+        let result = wallet.send_op(user_op, &mut account).await;
         println!("{}", result);
     }
 
