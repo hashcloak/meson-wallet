@@ -32,6 +32,7 @@ pub struct Deposit {
 }
 const DEPOSIT_SIGNATURE: &str = "0xb214faa5";
 const WITHDRAW_SIGNATURE: &str = "0x21a0adb6";
+const log_rpc_url: &str = "http://localhost:8545"; //For query logs, since currently Meson doesn't support log querying
 pub const TORNADO_ADDRESS: &str = "0x88bf8F944127B037585Bcb82c674b5Cefdc56Ab9";
 const MERKLE_LEVEL: usize = 20;
 impl Deposit {
@@ -159,8 +160,7 @@ impl Deposit {
 pub async fn generate_merkle_proof(deposit: &Deposit) -> (Vec<mimc_fr>, Vec<u128>, mimc_fr) {
     //todo: fetch addr from env of cfg
     let tornado_addr: Address = TORNADO_ADDRESS.parse().unwrap();
-    let rpc_url = "http://localhost:8545";
-    let provider = Provider::try_from(rpc_url).unwrap();
+    let provider = Provider::try_from(log_rpc_url).unwrap();
     let client = Arc::new(provider);
     let filter = Filter::new()
         .address(tornado_addr)
