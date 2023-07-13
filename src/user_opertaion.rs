@@ -3,7 +3,8 @@ use ethers::abi::AbiEncode;
 use ethers::abi::Address;
 use ethers::contract::{EthAbiCodec, EthAbiType};
 use ethers::core::utils::keccak256;
-use ethers::prelude::{Bytes, U256};
+use ethers::prelude::{Bytes, H256, U256};
+use std::ops::Deref;
 use std::str::FromStr;
 //use ethers_core::types::*;
 use serde::{Deserialize, Serialize};
@@ -130,15 +131,45 @@ impl UserOperation {
 
     ///For lighter signature scheme
     pub fn pack_into(mut self) -> Vec<u8> {
-        let mut bytes = self.encode();
-        bytes.resize(bytes.len() - 32, 0);
-        bytes
+        let user_operation_packed = UserOperationUnsigned::from(self.clone());
+        user_operation_packed.encode()
     }
 
     pub fn hash(mut self) -> [u8; 32] {
         let bytes = self.pack_into();
         let hash = keccak256(bytes);
         hash
+    }
+}
+
+#[derive(EthAbiCodec, EthAbiType)]
+pub struct UserOperationUnsigned {
+    pub sender: Address,
+    pub nonce: U256,
+    pub initCode: H256,
+    pub callData: H256,
+    pub callGasLimit: U256,
+    pub verificationGasLimit: U256,
+    pub preVerificationGas: U256,
+    pub maxFeePerGas: U256,
+    pub maxPriorityFeePerGas: U256,
+    pub paymasterAndData: H256,
+}
+
+impl From<UserOperation> for UserOperationUnsigned {
+    fn from(value: UserOperation) -> Self {
+        Self {
+            sender: value.sender,
+            nonce: value.nonce,
+            initCode: keccak256(value.initCode.deref()).into(),
+            callData: keccak256(value.callData.deref()).into(),
+            callGasLimit: value.callGasLimit,
+            verificationGasLimit: value.verificationGasLimit,
+            preVerificationGas: value.preVerificationGas,
+            maxFeePerGas: value.maxFeePerGas,
+            maxPriorityFeePerGas: value.maxPriorityFeePerGas,
+            paymasterAndData: keccak256(value.paymasterAndData.deref()).into(),
+        }
     }
 }
 

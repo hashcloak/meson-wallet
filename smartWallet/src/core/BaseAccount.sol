@@ -2,8 +2,7 @@
 pragma solidity ^0.8.12;
 
 /* solhint-disable avoid-low-level-calls */
-/* solhint-disable no-inline-assembly */
-/* solhint-disable reason-string */
+/* solhint-disable no-empty-blocks */
 
 import "../interfaces/IAccount.sol";
 import "../interfaces/IEntryPoint.sol";
@@ -19,13 +18,16 @@ abstract contract BaseAccount is IAccount {
 
     //return value in case of signature failure, with no time-range.
     // equivalent to _packValidationData(true,0,0);
-    uint256 constant internal SIG_VALIDATION_FAILED = 1;
+    uint256 internal constant SIG_VALIDATION_FAILED = 1;
 
     /**
-     * return the account nonce.
-     * subclass should return a nonce value that is used both by _validateAndUpdateNonce, and by the external provider (to read the current nonce)
+     * Return the account nonce.
+     * This method returns the next sequential nonce.
+     * For a nonce of a specific key, use `entrypoint.getNonce(account, key)`
      */
-    function nonce() public view virtual returns (uint256);
+    function getNonce() public view virtual returns (uint256) {
+        return entryPoint().getNonce(address(this), 0);
+    }
 
     /**
      * return the entryPoint used by this account.
@@ -37,21 +39,25 @@ abstract contract BaseAccount is IAccount {
      * Validate user's signature and nonce.
      * subclass doesn't need to override this method. Instead, it should override the specific internal validation methods.
      */
-    function validateUserOp(UserOperation calldata userOp, bytes32 userOpHash, uint256 missingAccountFunds)
-    external override virtual returns (uint256 validationData) {
+    function validateUserOp(
+        UserOperation calldata userOp,
+        bytes32 userOpHash,
+        uint256 missingAccountFunds
+    ) external virtual override returns (uint256 validationData) {
         _requireFromEntryPoint();
         validationData = _validateSignature(userOp, userOpHash);
-        if (userOp.initCode.length == 0) {
-            _validateAndUpdateNonce(userOp);
-        }
+        _validateNonce(userOp.nonce);
         _payPrefund(missingAccountFunds);
     }
 
     /**
      * ensure the request comes from the known entrypoint.
      */
-    function _requireFromEntryPoint() internal virtual view {
-        require(msg.sender == address(entryPoint()), "account: not from EntryPoint");
+    function _requireFromEntryPoint() internal view virtual {
+        require(
+            msg.sender == address(entryPoint()),
+            "account: not from EntryPoint"
+        );
     }
 
     /**
@@ -67,16 +73,28 @@ abstract contract BaseAccount is IAccount {
      *      If the account doesn't use time-range, it is enough to return SIG_VALIDATION_FAILED value (1) for signature failure.
      *      Note that the validation code cannot use block.timestamp (or block.number) directly.
      */
-    function _validateSignature(UserOperation calldata userOp, bytes32 userOpHash)
-    internal virtual returns (uint256 validationData);
+    function _validateSignature(
+        UserOperation calldata userOp,
+        bytes32 userOpHash
+    ) internal virtual returns (uint256 validationData);
 
     /**
-     * validate the current nonce matches the UserOperation nonce.
-     * then it should update the account's state to prevent replay of this UserOperation.
-     * called only if initCode is empty (since "nonce" field is used as "salt" on account creation)
-     * @param userOp the op to validate.
+     * Validate the nonce of the UserOperation.
+     * This method may validate the nonce requirement of this account.
+     * e.g.
+     * To limit the nonce to use sequenced UserOps only (no "out of order" UserOps):
+     *      `require(nonce < type(uint64).max)`
+     * For a hypothetical account that *requires* the nonce to be out-of-order:
+     *      `require(nonce & type(uint64).max == 0)`
+     *
+     * The actual nonce uniqueness is managed by the EntryPoint, and thus no other
+     * action is needed by the account itself.
+     *
+     * @param nonce to validate
+     *
+     * solhint-disable-next-line no-empty-blocks
      */
-    function _validateAndUpdateNonce(UserOperation calldata userOp) internal virtual;
+    function _validateNonce(uint256 nonce) internal view virtual {}
 
     /**
      * sends to the entrypoint (msg.sender) the missing funds for this transaction.
@@ -88,7 +106,10 @@ abstract contract BaseAccount is IAccount {
      */
     function _payPrefund(uint256 missingAccountFunds) internal virtual {
         if (missingAccountFunds != 0) {
-            (bool success,) = payable(msg.sender).call{value : missingAccountFunds, gas : type(uint256).max}("");
+            (bool success, ) = payable(msg.sender).call{
+                value: missingAccountFunds,
+                gas: type(uint256).max
+            }("");
             (success);
             //ignore failure (its EntryPoint's job to verify, not account.)
         }

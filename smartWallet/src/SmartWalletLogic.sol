@@ -19,10 +19,6 @@ contract SmartWalletLogic is BaseAccount, UUPSUpgradeable, Initializable {
         address indexed owner
     );
 
-    function nonce() public view virtual override returns (uint256) {
-        return _nonce;
-    }
-
     function entryPoint() public view virtual override returns (IEntryPoint) {
         return _entryPoint;
     }
@@ -65,12 +61,6 @@ contract SmartWalletLogic is BaseAccount, UUPSUpgradeable, Initializable {
             msg.sender == address(entryPoint()) || msg.sender == owner,
             "account: not Owner or EntryPoint"
         );
-    }
-
-    function _validateAndUpdateNonce(
-        UserOperation calldata userOp
-    ) internal override {
-        require(_nonce++ == userOp.nonce, "account: invalid nonce");
     }
 
     function _validateSignature(

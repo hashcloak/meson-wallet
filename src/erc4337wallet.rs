@@ -96,6 +96,7 @@ impl Erc4337Wallet {
         userOp = userOp.sender(account.address);
 
         //query nonce only if deployed
+        userOp = userOp.nonce(0);
         if account.deployed {
             let addr_str = "0x".to_owned() + &hex::encode(account.address);
             let nonce = self.query_nonce(addr_str).await;
@@ -113,19 +114,20 @@ impl Erc4337Wallet {
         userOp = userOp.call_data(call_data);
         userOp = userOp.verification_gas_limit(0xffffff);
         userOp = userOp.pre_verification_gas(0xffffff);
+        userOp = userOp.max_fee_per_gas(0xffffff);
 
         //set signature to random data for querying gas
         userOp = userOp.signature(Bytes::from_str("0x43b8da28f2e270442c1618c6594a8b9c3cc44fd321d6135339be632af153e1fa5a00d1b1336d40091ae887b0b8d2a8a6f20b8d9818435196082f38cc46e0bad11b").unwrap());
-        let gas_info = self.query_gas_info(account, &userOp).await;
-        println!("{gas_info:?}");
+        //let gas_info = self.query_gas_info(account, &userOp).await;
+        //println!("{gas_info:?}");
 
         //shoud set the gas price from gas_info (current stackup version doesn't work)
         userOp = userOp
-            .call_gas_imit(gas_info.callGasLimit)
+            .call_gas_imit(100000000)
             .verification_gas_limit(500000)
             .pre_verification_gas(1000000)
-            .max_fee_per_gas(3500000000u32)
-            .max_priority_fee_per_gas(220000000);
+            .max_fee_per_gas(7000000000u64)
+            .max_priority_fee_per_gas(600000000);
 
         //set signature to empty bytes for signing
         userOp = userOp.signature(Bytes::default());
@@ -239,7 +241,7 @@ impl Erc4337Wallet {
                 "eth_call",
                 json!([{
                     "to": smart_account_addr,
-                    "data": "0xaffed0e0",
+                    "data": "0xd087d288",
                 },"latest"]),
             )
             .await
@@ -300,7 +302,7 @@ mod tests {
         wallet.create_account(
             owner,
             Some(
-                "0x8944bd0FeD9732f99c5a5A4B5d730a1B7f45783c"
+                "0x3cD5A8Ddd0EFb5804978a4Da74D3Fb6d074829F3"
                     .parse()
                     .unwrap(),
             ),
@@ -375,11 +377,11 @@ mod tests {
     pub async fn test_send() {
         let wallet_config_path = PathBuf::from("wallet_config.toml");
         let wallet = Erc4337Wallet::new(wallet_config_path);
-        let mut account = wallet.load_account("0xdc56639f24a65e7a5091d16c9dec84442af924e7".into());
+        let mut account = wallet.load_account("0x0009b114f7f9b054b30f1cdc18080e115e14fd51".into());
         let (userOp, ophash) = wallet
             .fill_user_op(
                 &account,
-                "0x0000000000000000000000000000000000000006"
+                "0x0000000000000000000000000000000000000010"
                     .parse()
                     .unwrap(),
                 U256::from_dec_str("10").unwrap(),
@@ -390,6 +392,7 @@ mod tests {
 
         let result = wallet.send_op(userOp, &mut account).await;
         println!("{}", result);
+        println!("{}", ophash);
     }
 
     #[tokio::test]
