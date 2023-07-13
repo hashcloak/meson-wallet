@@ -118,12 +118,12 @@ impl Erc4337Wallet {
 
         //set signature to random data for querying gas
         userOp = userOp.signature(Bytes::from_str("0x43b8da28f2e270442c1618c6594a8b9c3cc44fd321d6135339be632af153e1fa5a00d1b1336d40091ae887b0b8d2a8a6f20b8d9818435196082f38cc46e0bad11b").unwrap());
-        //let gas_info = self.query_gas_info(account, &userOp).await;
-        //println!("{gas_info:?}");
+        let gas_info = self.query_gas_info(account, &userOp).await;
+        println!("{gas_info:?}");
 
         //shoud set the gas price from gas_info (current stackup version doesn't work)
         userOp = userOp
-            .call_gas_imit(100000000)
+            .call_gas_imit(gas_info.callGasLimit)
             .verification_gas_limit(500000)
             .pre_verification_gas(1000000)
             .max_fee_per_gas(7000000000u64)
@@ -381,7 +381,7 @@ mod tests {
         let (userOp, ophash) = wallet
             .fill_user_op(
                 &account,
-                "0x0000000000000000000000000000000000000010"
+                "0x0000000000000000000000000000000000000012"
                     .parse()
                     .unwrap(),
                 U256::from_dec_str("10").unwrap(),
@@ -400,7 +400,7 @@ mod tests {
     pub async fn test_tornado_deposit() {
         let wallet_config_path = PathBuf::from("wallet_config.toml");
         let wallet = Erc4337Wallet::new(wallet_config_path);
-        let mut account = wallet.load_account("0xca45fe0684c78401e48c853fc911a93ef77a1b31".into());
+        let mut account = wallet.load_account("0x0009b114f7f9b054b30f1cdc18080e115e14fd51".into());
         let (user_op, op_hash) = wallet
             .fill_tornado_deposit_user_op(
                 "0.1",
@@ -417,11 +417,11 @@ mod tests {
     pub async fn test_tornado_withdraw() {
         let wallet_config_path = PathBuf::from("wallet_config.toml");
         let wallet = Erc4337Wallet::new(wallet_config_path);
-        let mut account = wallet.load_account("0xca45fe0684c78401e48c853fc911a93ef77a1b31".into());
+        let mut account = wallet.load_account("0x0009b114f7f9b054b30f1cdc18080e115e14fd51".into());
         let (user_op, op_hash) = wallet
         .fill_tornado_withdraw_user_op(
-            "tornado-eth-0.1-12345-0x10fe361cf9e3c8fc040dee1dfb71c41fb06a500e5a8fc2f1dc5b140607c9b656069573d13ab0d66ca39a003e5901aa63efbdf5939d242a01b60534ef89b8",
-             "0x0000000000000000000000000000000000000007".parse().unwrap(),
+            "tornado-eth-0.1-12345-0xdf42c6a8320aa5cf5880d2dcfd6f09404a82a0420529c4010d97cb15700cf6a46cbfad5d4285f00d3e0230fc2120bfaf1c4fb4a0d18e41ad7113269e6682",
+             "0x0000000000000000000000000000000000000011".parse().unwrap(),
               12345,
                &account,
                 tornado_util::TORNADO_ADDRESS.parse().unwrap(),

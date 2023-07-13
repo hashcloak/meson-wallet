@@ -167,12 +167,12 @@ pub async fn generate_merkle_proof(deposit: &Deposit) -> (Vec<mimc_fr>, Vec<u128
         .event("Deposit(bytes32,uint32,uint256)")
         .from_block(0);
     let mut logs = client.get_logs(&filter).await.unwrap();
+    println!("here {:?}", &logs);
     logs.sort_by(|a, b| {
         U256::from_big_endian(&a.data[28..32])
             .partial_cmp(&U256::from_big_endian(&b.data[28..32]))
             .unwrap()
     });
-    // println!("{}", &logs[0].topics[1]);
     let leaves: Vec<mimc_fr> = logs
         .iter()
         .map(|log| from_hex::<mimc_fr>(&utils::hex::encode(log.topics[1])).unwrap())
