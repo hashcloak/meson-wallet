@@ -396,7 +396,7 @@ mod tests {
     }
 
     #[tokio::test]
-
+    //for some version of bundler, needs to disable gas query to endable tornado cash
     pub async fn test_tornado_deposit() {
         let wallet_config_path = PathBuf::from("wallet_config.toml");
         let wallet = Erc4337Wallet::new(wallet_config_path);
@@ -414,15 +414,15 @@ mod tests {
     }
 
     #[tokio::test]
-    //for some version of bundler, needs to disable gas query to withdraw
+    //for some version of bundler, needs to disable gas query to endable tornado cash
     pub async fn test_tornado_withdraw() {
         let wallet_config_path = PathBuf::from("wallet_config.toml");
         let wallet = Erc4337Wallet::new(wallet_config_path);
         let mut account = wallet.load_account("0x0009b114f7f9b054b30f1cdc18080e115e14fd51".into());
         let (user_op, op_hash) = wallet
         .fill_tornado_withdraw_user_op(
-            "tornado-eth-0.1-12345-0xd729aa0794e6144059b71a1b42ea44d9ea9ce87bbbaf67cc6b474e7d562de8417a462136a4449b031edbce63e924d48c271d44664d2d389c96f0f85802bd",
-             "0x0000000000000000000000000000000000000077".parse().unwrap(),
+            "tornado-eth-0.1-12345-0xb232192e07b6122f607f016871658e8fc602696738064ca18acc275968f6006d98a270ffbccba51af4c9d668eda576592eb7cfe42d47913b8175c6f27b39",
+             "0x0000000000000000000000000000000000000087".parse().unwrap(),
               12345,
                &account,
                 tornado_util::TORNADO_ADDRESS.parse().unwrap(),
