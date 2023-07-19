@@ -54,12 +54,12 @@ contract TestUtils is Test {
         return (mUserOp, opHash);
     }
 
-    function testEncode() public {
+    function testEncode() public view {
         bytes memory enc = type(SmartWalletProxy).creationCode;
         console.logBytes(enc);
     }
 
-    function testCreat2() public {
+    function testCreat2() public view {
         uint salt = 100;
         address owner = 0x5B38Da6a701c568545dCfcB03FcB875f56beddC4;
         address accountImplementation = 0xc0ffee254729296a45a3885639AC7E10F9d54979;

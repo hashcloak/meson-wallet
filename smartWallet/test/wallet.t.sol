@@ -11,7 +11,7 @@ import "openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol";
 contract WalletTest is Test {
     SmartWalletLogic impl;
     TestUtils tu;
-    uint256 owner_key = 1;
+    uint256 ownerKey = 1;
     using UserOperationLib for UserOperation;
     using ECDSA for bytes32;
 
@@ -34,7 +34,7 @@ contract WalletTest is Test {
     );
 
     function setUp() public {
-        address owner = vm.addr(owner_key);
+        address owner = vm.addr(ownerKey);
         //fake entrypoint
         //impl without proxy
         impl = new SmartWalletLogic(IEntryPoint(address(this)));
@@ -49,14 +49,14 @@ contract WalletTest is Test {
     }
 
     function testValidateOp() public {
-        address owner = vm.addr(owner_key);
+        address owner = vm.addr(ownerKey);
         EntryPoint ep = new EntryPoint();
         impl = new SmartWalletLogic(IEntryPoint(address(ep)));
         impl.initialize(owner);
         UserOperation memory userOp;
         uint256 preNonce = impl.getNonce();
         bytes32 opHash;
-        (userOp, opHash) = tu.signUserOp(userOp, address(this), owner_key);
+        (userOp, opHash) = tu.signUserOp(userOp, address(this), ownerKey);
         vm.prank(address(ep));
         uint256 result = impl.validateUserOp(userOp, opHash, 0);
         assertEq(result, 0);
@@ -87,7 +87,7 @@ contract WalletTest is Test {
         UserOperation memory userOp;
 
         uint256 preNonce = wallet.getNonce();
-        bytes32 opHash = SignUserOp(userOp, owner_key);
+        bytes32 opHash = signUserOp(userOp, ownerKey);
         vm.prank(address(ep));
         uint256 result = wallet.validateUserOp(userOp, opHash, 0);
         assertEq(result, 0);
@@ -96,7 +96,7 @@ contract WalletTest is Test {
         //assertEq(wallet.getNonce(), preNonce + 1);
     }
 
-    function SignUserOp(
+    function signUserOp(
         UserOperation memory userOp,
         uint256 key
     ) public view returns (bytes32 opHash) {
