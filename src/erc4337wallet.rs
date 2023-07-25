@@ -294,6 +294,8 @@ mod tests {
     use futures::FutureExt;
     use std::sync::Arc;
     const RPC_URL: &str = "https://eth.llamarpc.com";
+
+    //test create basic smart contract account
     #[test]
     pub fn test_create_account() {
         let wallet_config_path = PathBuf::from("wallet_config.toml");
@@ -373,8 +375,9 @@ mod tests {
             .await;
     }
 
+    //test sending userOp (needs to set bundler url in send_op())
     #[tokio::test]
-    pub async fn test_send() {
+    pub async fn test_send_userop() {
         let wallet_config_path = PathBuf::from("wallet_config.toml");
         let wallet = Erc4337Wallet::new(wallet_config_path);
         let mut account = wallet.load_account("0x0009b114f7f9b054b30f1cdc18080e115e14fd51".into());
@@ -396,6 +399,7 @@ mod tests {
     }
 
     #[tokio::test]
+    //test sending tornado cash deposit userop
     //for some version of bundler, needs to disable gas query to endable tornado cash
     pub async fn test_tornado_deposit() {
         let wallet_config_path = PathBuf::from("wallet_config.toml");
@@ -414,6 +418,7 @@ mod tests {
     }
 
     #[tokio::test]
+    //test sending tornado cash withdraw userop
     //for some version of bundler, needs to disable gas query to endable tornado cash
     pub async fn test_tornado_withdraw() {
         let wallet_config_path = PathBuf::from("wallet_config.toml");
