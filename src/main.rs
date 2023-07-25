@@ -1,4 +1,5 @@
 use std::env;
+mod bls_util;
 mod cli;
 mod create_sender_util;
 mod erc4337_common;
