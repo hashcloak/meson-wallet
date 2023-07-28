@@ -24,6 +24,7 @@ toml = "0.5"
 rpassword = "6.0"
 dialoguer = "0.10"
 num-bigint = "0.4.3"
+num-integer = "0.1"
 tokio = { version = "1.18.2", features = ["macros"] }
 babyjubjub-rs = "0.0.10"
 ff_ce = "0.11"
@@ -37,6 +38,8 @@ bitvec = "1"
 blake-hash = "0.4.1"
 ark-snark = "0.4.0"
 ark-serialize = "0.4.2"
+ark-ec = "0.4.2"
+ark-ff = "0.4.2"
 
 [build-dependencies]
 bindgen = "0.53.1"
