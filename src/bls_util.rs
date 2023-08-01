@@ -1,10 +1,84 @@
-use ark_bn254::{Fq, G1Affine};
-use ark_ec::CurveGroup;
-use ark_ff::fields::Field;
+use ark_bn254::{Bn254, Fq, Fr, G1Affine, G2Affine};
+use ark_ec::{pairing::Pairing, AffineRepr, CurveGroup};
+use ark_ff::{fields::Field, UniformRand};
+use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use ethers::core::k256::sha2::{Digest, Sha256};
 use num_bigint::BigUint;
+use sha3::Keccak256;
 
 pub const FIELD_ORDER: &[u8] = b"30644e72e131a029b85045b68181585d97816a916871ca8d3c208c16d87cfd47";
+pub const DOMAIN: &[u8] = b"eip4337.bls.domain";
+pub struct PrivateKey(Fr);
+
+pub struct PublicKey(G2Affine);
+
+impl PrivateKey {
+    pub fn new<R: rand::Rng>(rng: &mut R) -> Self {
+        let sk = Fr::rand(rng);
+        PrivateKey(sk)
+    }
+
+    pub fn to_bytes(&self) -> Vec<u8> {
+        BigUint::from(self.0).to_bytes_be()
+    }
+
+    pub fn derive_public_key(&self) -> PublicKey {
+        PublicKey((G2Affine::generator() * (self.0)).into())
+    }
+}
+
+impl PublicKey {
+    pub fn from_compressed(bytes: &[u8]) -> Self {
+        let g2 = G2Affine::deserialize_compressed(bytes).unwrap();
+        PublicKey(g2)
+    }
+
+    pub fn from_uncompressed(bytes: &[u8]) -> Self {
+        let g2 = G2Affine::deserialize_uncompressed(bytes).unwrap();
+        PublicKey(g2)
+    }
+
+    pub fn to_compressed(&self) -> Vec<u8> {
+        let mut compressed_bytes = Vec::<u8>::new();
+        self.0.serialize_compressed(&mut compressed_bytes).unwrap();
+        compressed_bytes
+    }
+
+    pub fn to_uncompressed(&self) -> Vec<u8> {
+        let x_c0 = BigUint::from(self.0.x.c0).to_bytes_be();
+        let x_c1 = BigUint::from(self.0.x.c1).to_bytes_be();
+        let y_c0 = BigUint::from(self.0.y.c0).to_bytes_be();
+        let y_c1 = BigUint::from(self.0.y.c1).to_bytes_be();
+        let uncompressed_bytes = [x_c0, x_c1, y_c0, y_c1].concat();
+        uncompressed_bytes
+    }
+}
+
+pub fn sign(private_key: PrivateKey, message: &[u8]) -> Vec<u8> {
+    let domain = Keccak256::new().chain_update(DOMAIN).finalize();
+    let hash_point = hash_to_point(message, &domain);
+
+    let signature = hash_point * private_key.0;
+    to_uncompressed_g1(&signature.into_affine())
+}
+
+pub fn verify(public_key: &PublicKey, message: &[u8], signature: &[u8]) -> bool {
+    let domain = Keccak256::new().chain_update(DOMAIN).finalize();
+    let msg_point = hash_to_point(message, &domain);
+    let sig_point = G1Affine::new(
+        BigUint::from_bytes_be(&signature[..32]).into(),
+        BigUint::from_bytes_be(&signature[32..]).into(),
+    );
+    let e1 = Bn254::pairing(sig_point, G2Affine::generator());
+    let e2 = Bn254::pairing(msg_point, public_key.0);
+    e1 == e2
+}
+
+pub fn to_uncompressed_g1(point: &G1Affine) -> Vec<u8> {
+    let x = BigUint::from(point.x).to_bytes_be();
+    let y = BigUint::from(point.y).to_bytes_be();
+    [x, y].concat()
+}
 
 pub fn hash_to_point(msg: &[u8], domain: &[u8]) -> G1Affine {
     let e = hash_to_field(domain, msg, 2);
@@ -189,7 +263,6 @@ pub fn expand_msg(domain: &[u8], msg: &[u8], out_len: usize) -> Vec<u8> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use sha3::{Digest, Keccak256};
     #[test]
     pub fn test_expand_msg() {
         let b = Keccak256::new()
@@ -350,5 +423,31 @@ mod test {
                 Fq::from(BigUint::parse_bytes(b"21036839850554353652125067833375828907719122794857623966443949244034356537794", 10).unwrap())
             )
         );
+    }
+
+    #[test]
+    pub fn test_sig_veri() {
+        let mut rng = rand::thread_rng();
+        let sk = PrivateKey::new(&mut rng);
+        let pk = sk.derive_public_key();
+
+        let sk2 = PrivateKey::new(&mut rng);
+        let pk2 = sk2.derive_public_key();
+        let msg = b"hellothere";
+
+        let sig = sign(sk, msg);
+        let res = verify(&pk, msg, &sig);
+        assert!(res);
+
+        let res_f = verify(&pk2, msg, &sig);
+        assert!(!res_f);
+    }
+
+    #[test]
+    pub fn test_temp() {
+        let domain = Keccak256::new()
+            .chain_update(b"eip4337.bls.domain")
+            .finalize();
+        println!("{}", hex::encode(&domain));
     }
 }

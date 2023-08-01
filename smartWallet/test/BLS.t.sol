@@ -141,9 +141,4 @@ contract BlsTest is Test {
         entry.handleAggregatedOps(opas, payable(acc));
         assertEq(dest.balance, 10);
     }
-
-    function testHashtoPoint() public {
-        bytes memory ms = "0x73616d706c65";
-        uint256[2] memory message = BLSOpen.hashToPoint(BLS_DOMAIN, ms);
-    }
 }
