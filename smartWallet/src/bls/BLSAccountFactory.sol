@@ -6,6 +6,7 @@ import "openzeppelin-contracts/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 
 import "../interfaces/IEntryPoint.sol";
 import "./BLSAccount.sol";
+import "../SmartWalletProxy.sol";
 
 /* solhint-disable no-inline-assembly */
 
@@ -47,7 +48,7 @@ contract BLSAccountFactory {
         return
             BLSAccount(
                 payable(
-                    new ERC1967Proxy{salt: bytes32(salt)}(
+                    new SmartWalletProxy{salt: bytes32(salt)}(
                         address(accountImplementation),
                         abi.encodeCall(BLSAccount.initialize, aPublicKey)
                     )
@@ -67,7 +68,7 @@ contract BLSAccountFactory {
                 bytes32(salt),
                 keccak256(
                     abi.encodePacked(
-                        type(ERC1967Proxy).creationCode,
+                        type(SmartWalletProxy).creationCode,
                         abi.encode(
                             address(accountImplementation),
                             abi.encodeCall(BLSAccount.initialize, (aPublicKey))
