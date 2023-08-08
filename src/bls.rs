@@ -3,12 +3,14 @@ use ark_ec::{pairing::Pairing, AffineRepr, CurveGroup};
 use ark_ff::{fields::Field, UniformRand, Zero};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use ethers::core::k256::sha2::{Digest, Sha256};
+use ethers::core::types::U256;
 use hash_to_point::hash_to_point;
 use num_bigint::BigUint;
 use sha3::Keccak256;
 pub mod hash_to_point;
 pub mod multi_sig;
 
+//order of Fq
 pub const FIELD_ORDER: &[u8] = b"30644e72e131a029b85045b68181585d97816a916871ca8d3c208c16d87cfd47";
 pub const DOMAIN: &[u8] = b"eip4337.bls.domain";
 pub struct PrivateKey(Fr);
@@ -48,16 +50,24 @@ impl PublicKey {
     }
 
     pub fn to_uncompressed(&self) -> Vec<u8> {
-        let x_c0 = BigUint::from(self.0.x.c0).to_bytes_be();
-        let x_c1 = BigUint::from(self.0.x.c1).to_bytes_be();
-        let y_c0 = BigUint::from(self.0.y.c0).to_bytes_be();
-        let y_c1 = BigUint::from(self.0.y.c1).to_bytes_be();
-        let uncompressed_bytes = [x_c0, x_c1, y_c0, y_c1].concat();
+        let mut uncompressed_bytes = Vec::<u8>::new();
+        self.0
+            .serialize_uncompressed(&mut uncompressed_bytes)
+            .unwrap();
         uncompressed_bytes
+    }
+
+    //to solidity uint256[4], different from to_uncompressed
+    pub fn to_solidity_pk(&self) -> [U256; 4] {
+        let x_c0 = U256::from(BigUint::from(self.0.x.c0).to_bytes_be().as_slice());
+        let x_c1 = U256::from(BigUint::from(self.0.x.c1).to_bytes_be().as_slice());
+        let y_c0 = U256::from(BigUint::from(self.0.y.c0).to_bytes_be().as_slice());
+        let y_c1 = U256::from(BigUint::from(self.0.y.c1).to_bytes_be().as_slice());
+        [x_c0, x_c1, y_c0, y_c1]
     }
 }
 
-pub fn sign(sk: PrivateKey, msg: &[u8]) -> Vec<u8> {
+pub fn sign(sk: &PrivateKey, msg: &[u8]) -> Vec<u8> {
     let domain = Keccak256::new().chain_update(DOMAIN).finalize();
     let hash_point = hash_to_point(msg, &domain);
 
@@ -77,21 +87,31 @@ pub fn verify(pk: &PublicKey, msg: &[u8], signature: &[u8]) -> bool {
     e1 == e2
 }
 
+//Returns G1 Affine in uncompressed bytes
 pub fn to_uncompressed_g1(point: &G1Affine) -> Vec<u8> {
-    let x = BigUint::from(point.x).to_bytes_be();
-    let y = BigUint::from(point.y).to_bytes_be();
+    let x = big_endian_pad_to_u256(BigUint::from(point.x).to_bytes_be());
+    let y = big_endian_pad_to_u256(BigUint::from(point.y).to_bytes_be());
     [x, y].concat()
 }
 
+//Sha256 hash to Fr
 fn hash_to_fr(msg: &[u8]) -> Fr {
     let sha_msg = Sha256::new().chain_update(msg).finalize();
     Fr::from(BigUint::from_bytes_be(&sha_msg))
 }
 
+fn big_endian_pad_to_u256(bytes: Vec<u8>) -> Vec<u8> {
+    let diff = 32 - bytes.len();
+    if diff != 0 {
+        let bytes = [vec![0u8; diff], bytes].concat();
+        return bytes;
+    }
+    bytes
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
-    use ethers::utils::hex;
     #[test]
     pub fn test_sig_veri() {
         let mut rng = rand::thread_rng();
@@ -102,11 +122,35 @@ mod test {
         let pk2 = sk2.derive_public_key();
         let msg = b"hellothere";
 
-        let sig = sign(sk, msg);
+        let sig = sign(&sk, msg);
         let res = verify(&pk, msg, &sig);
         assert!(res);
 
         let res_f = verify(&pk2, msg, &sig);
         assert!(!res_f);
+    }
+
+    #[test]
+    pub fn test_ser() {
+        let mut rng = rand::thread_rng();
+        let sk = PrivateKey::new(&mut rng);
+        let pk = sk.derive_public_key();
+        let msg = b"hellomieriwobgoejg";
+        let sig = sign(&sk, msg);
+
+        let res = verify(&pk, msg, &sig);
+        assert!(res);
+
+        let uc_pk = pk.to_uncompressed();
+        let pk2 = PublicKey::from_uncompressed(&uc_pk);
+        let res2 = verify(&pk2, msg, &sig);
+        assert!(res2);
+        assert!(pk.0 == pk2.0);
+
+        let c_pk = pk.to_compressed();
+        let pk3 = PublicKey::from_compressed(&c_pk);
+        let res3 = verify(&pk3, msg, &sig);
+        assert!(res3);
+        assert!(pk.0 == pk3.0);
     }
 }

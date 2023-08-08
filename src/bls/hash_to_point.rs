@@ -5,6 +5,7 @@ use ark_ff::fields::Field;
 use ethers::core::k256::sha2::{Digest, Sha256};
 use num_bigint::BigUint;
 
+//Fouque-Tibouchi Hash to Curve
 pub fn hash_to_point(msg: &[u8], domain: &[u8]) -> G1Affine {
     let e = hash_to_field(domain, msg, 2);
     let p0 = map_to_point(e[0]);
@@ -13,7 +14,7 @@ pub fn hash_to_point(msg: &[u8], domain: &[u8]) -> G1Affine {
     p.into_affine()
 }
 
-pub fn map_to_point(mut x: Fq) -> G1Affine {
+fn map_to_point(mut x: Fq) -> G1Affine {
     let field_order = BigUint::parse_bytes(FIELD_ORDER, 16).unwrap();
     let f_o = Fq::from(field_order.clone());
     let z0 = Fq::from(
@@ -77,7 +78,7 @@ pub fn map_to_point(mut x: Fq) -> G1Affine {
     G1Affine::new(x, a1)
 }
 
-pub fn hash_to_field(domain: &[u8], msg: &[u8], count: usize) -> Vec<Fq> {
+fn hash_to_field(domain: &[u8], msg: &[u8], count: usize) -> Vec<Fq> {
     let u = 48;
     let msg = expand_msg(domain, msg, count * u);
     let mut els: Vec<Fq> = Vec::new();
@@ -90,7 +91,7 @@ pub fn hash_to_field(domain: &[u8], msg: &[u8], count: usize) -> Vec<Fq> {
     els
 }
 
-pub fn expand_msg(domain: &[u8], msg: &[u8], out_len: usize) -> Vec<u8> {
+fn expand_msg(domain: &[u8], msg: &[u8], out_len: usize) -> Vec<u8> {
     if domain.len() > 32 {
         panic!("Expect 32 bytes but got {}", domain.len());
     }

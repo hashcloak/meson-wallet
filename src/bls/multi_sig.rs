@@ -5,30 +5,23 @@ use ark_ff::Zero;
 use ethers::core::k256::sha2::Digest;
 use sha3::Keccak256;
 
+//Public Key for BLS Multi-sig
 pub struct MultiSigPublicKey {
+    //aggregate public key
     apk: PublicKey,
+    //concatenation of all the public keys used in apk
     pks_concat: Vec<u8>,
 }
 
 impl MultiSigPublicKey {
     pub fn new(pks: &[&PublicKey]) -> Self {
-        let mut apk = G2Projective::zero();
-        let pks_concat: Vec<Vec<u8>> = pks.iter().map(|pk| pk.to_uncompressed()).collect();
-        let pks_concat = pks_concat.concat();
-        for pk in pks {
-            let mut pk_pks = pk.to_uncompressed();
-            pk_pks.extend(&pks_concat);
-            let hpks_i = hash_to_fr(&pk_pks);
-            apk = apk + (pk.0 * hpks_i);
-        }
-        MultiSigPublicKey {
-            apk: PublicKey(apk.into_affine()),
-            pks_concat: pks_concat,
-        }
+        let (apk, pks_concat) = public_key_aggregation(pks);
+        MultiSigPublicKey { apk, pks_concat }
     }
 }
 
-pub fn public_key_aggregation(pks: &[PublicKey]) -> PublicKey {
+//Returns aggregate public key and the concatenation of all the public keys
+pub fn public_key_aggregation(pks: &[&PublicKey]) -> (PublicKey, Vec<u8>) {
     let mut apk = G2Projective::zero();
     let pks_concat: Vec<Vec<u8>> = pks.iter().map(|pk| pk.to_uncompressed()).collect();
     let pks_concat = pks_concat.concat();
@@ -38,9 +31,10 @@ pub fn public_key_aggregation(pks: &[PublicKey]) -> PublicKey {
         let hpks_i = hash_to_fr(&pk_pks);
         apk = apk + (pk.0 * hpks_i);
     }
-    PublicKey(apk.into_affine())
+    (PublicKey(apk.into_affine()), pks_concat)
 }
 
+//Returns a sigle signature piece to a private key
 pub fn multi_sig_sign(
     mpk: &MultiSigPublicKey,
     sk: &PrivateKey,
@@ -58,6 +52,7 @@ pub fn multi_sig_sign(
     signature
 }
 
+//Combines multiple signature pieces to create a signature of the message
 pub fn multi_sig_combine_sig(sigs: &[G1Projective]) -> Vec<u8> {
     let mut asig = G1Projective::zero();
     for sig in sigs {
@@ -88,6 +83,11 @@ mod test {
         let sigs = &[s1, s2, s3];
         let asig = multi_sig_combine_sig(sigs);
         let res = verify(&mpk.apk, msg, &asig);
-        println!("{}", res);
+        assert!(res);
+
+        let sigs = &[s1, s2];
+        let asig = multi_sig_combine_sig(sigs);
+        let res = verify(&mpk.apk, msg, &asig);
+        assert!(!res);
     }
 }

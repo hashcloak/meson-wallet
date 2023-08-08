@@ -1,4 +1,5 @@
 #![allow(non_snake_case)]
+use crate::bls::PublicKey;
 use crate::cli;
 use crate::create_sender_util::{create2addr, create_init_code};
 use crate::erc4337_common::{ERC4337Error, GasQueryResult};
@@ -16,9 +17,12 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
 use std::io::Write;
-use std::ops::Add;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
+
+//Different from crate::bls::PublicKey to derive serde
+//todo: condider using compressed g2 form
+type BLSPublicKey = [U256; 4];
 
 #[derive(Deserialize)]
 pub struct Erc4337Wallet {
@@ -36,6 +40,15 @@ struct ChainInfo {
 pub struct SimpleAccount {
     address: Address,
     owner: Address,
+    entry_point: Address,
+    salt: U256,
+    deployed: bool,
+}
+#[derive(Deserialize, Serialize)]
+pub struct BLSAccount {
+    key_store_path: PathBuf,
+    address: Address,
+    public_key: BLSPublicKey,
     entry_point: Address,
     salt: U256,
     deployed: bool,

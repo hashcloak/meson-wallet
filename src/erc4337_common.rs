@@ -38,3 +38,11 @@ impl fmt::Display for ERC4337Error {
         write!(f, "code: {}, message: {}", self.code, self.message)
     }
 }
+
+pub trait Account {
+    fn create_init_code(&self) -> Vec<u8>;
+
+    fn get_create2_address(&self) -> Address;
+
+    fn sign(&self, msg: &[u8]) -> Vec<u8>;
+}
