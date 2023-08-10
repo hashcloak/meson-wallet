@@ -17,6 +17,7 @@ import "../src/core/SenderCreator.sol";
 contract BlsTest is Test {
     BLSSignatureAggregator agg;
     EntryPoint entry;
+    BLSAccount accWithAggr;
     BLSAccount acc;
     BLSUtil bu;
     BLSAccountFactory bf;
@@ -26,7 +27,8 @@ contract BlsTest is Test {
         agg = new BLSSignatureAggregator();
         entry = new EntryPoint();
         bu = new BLSUtil();
-        acc = new BLSAccount(IEntryPoint(entry), address(agg));
+        accWithAggr = new BLSAccount(IEntryPoint(entry), address(agg));
+        acc = new BLSAccount(IEntryPoint(entry), address(0));
         bf = new BLSAccountFactory(IEntryPoint(entry), address(agg));
         sc = new SenderCreator();
         uint256[4] memory publicKey = [
@@ -35,11 +37,35 @@ contract BlsTest is Test {
             0x128f731a6a0c284bbead710fa8059746ce3effdc7e59257fc5ade51b9e60b622,
             0x27bae2c16607c1428f8fc8eec7925fb0d7b6cc0e806c857b9cfb54aba0b9e026
         ];
+        accWithAggr.initialize(publicKey);
         acc.initialize(publicKey);
     }
 
-    //direct call to agreegator without entrypoint
+    //direct call to agrregator without entrypoint
     function testAgrregatorVerify() public view {
+        uint256 key = 0xc9afa9d845ba75166b5c215767b1d6934e50c3db36e89b127b8a622b120f6721;
+        UserOperation memory userOp = UserOperation(
+            address(accWithAggr),
+            0,
+            "",
+            "",
+            999999,
+            999999,
+            999999,
+            999999,
+            999999,
+            "",
+            ""
+        );
+        (UserOperation memory userOp1, bytes memory signature) = bu
+            .signUserOpAggr(userOp, key, address(agg));
+        UserOperation[] memory ops = new UserOperation[](1);
+        ops[0] = userOp1;
+        agg.validateSignatures(ops, signature); //revert when failed
+    }
+
+    //direct call to an account with no aggregator without entrypoint
+    function testVerify() public {
         uint256 key = 0xc9afa9d845ba75166b5c215767b1d6934e50c3db36e89b127b8a622b120f6721;
         UserOperation memory userOp = UserOperation(
             address(acc),
@@ -54,14 +80,14 @@ contract BlsTest is Test {
             "",
             ""
         );
-        (UserOperation memory userOp1, bytes memory signature) = bu.signUserOp(
+        (UserOperation memory userOp1, bytes32 opHash) = bu.signUserOp(
             userOp,
-            key,
-            address(agg)
+            address(entry),
+            key
         );
-        UserOperation[] memory ops = new UserOperation[](1);
-        ops[0] = userOp1;
-        agg.validateSignatures(ops, signature); //revert when failed
+        vm.prank(address(entry));
+        uint256 result = acc.validateUserOp(userOp1, opHash, 0);
+        assertEq(result, 0);
     }
 
     //test generating account with SenderCreator.sol using createBLSInitCode function
@@ -104,8 +130,45 @@ contract BlsTest is Test {
     function testUserOpWithAggregator() public {
         uint256 key = 0xc9afa9d845ba75166b5c215767b1d6934e50c3db36e89b127b8a622b120f6721;
         vm.deal(address(this), 1 ether);
-        vm.deal(address(acc), 1 ether);
+        vm.deal(address(accWithAggr), 1 ether);
         agg.addStake{value: 100000000000000}(IEntryPoint(entry), 100);
+        address dest = 0x85ef6db74c13B3bfa12A784702418e5aAfad73EB;
+        bytes memory callData = abi.encodeWithSelector(
+            SmartWalletLogic.execute.selector,
+            dest,
+            10,
+            ""
+        );
+        UserOperation memory userOp = UserOperation(
+            address(accWithAggr),
+            0,
+            "",
+            callData,
+            999999,
+            999999,
+            999999,
+            999999,
+            999999,
+            "",
+            ""
+        );
+        (UserOperation memory userOp1, bytes memory signature) = bu
+            .signUserOpAggr(userOp, key, address(agg));
+        UserOperation[] memory ops = new UserOperation[](1);
+        ops[0] = userOp1;
+        IEntryPoint.UserOpsPerAggregator[]
+            memory opas = new IEntryPoint.UserOpsPerAggregator[](1);
+        IEntryPoint.UserOpsPerAggregator memory opa = IEntryPoint
+            .UserOpsPerAggregator(ops, IAggregator(agg), signature);
+        opas[0] = opa;
+        entry.handleAggregatedOps(opas, payable(accWithAggr));
+        assertEq(dest.balance, 10);
+    }
+
+    //test send ether through entrypoint without aggregator
+    function testUserOpWithoutAggregator() public {
+        vm.deal(address(acc), 1 ether);
+        uint256 key = 0xc9afa9d845ba75166b5c215767b1d6934e50c3db36e89b127b8a622b120f6721;
         address dest = 0x85ef6db74c13B3bfa12A784702418e5aAfad73EB;
         bytes memory callData = abi.encodeWithSelector(
             SmartWalletLogic.execute.selector,
@@ -126,19 +189,14 @@ contract BlsTest is Test {
             "",
             ""
         );
-        (UserOperation memory userOp1, bytes memory signature) = bu.signUserOp(
+        (UserOperation memory userOp1, ) = bu.signUserOp(
             userOp,
-            key,
-            address(agg)
+            address(entry),
+            key
         );
         UserOperation[] memory ops = new UserOperation[](1);
         ops[0] = userOp1;
-        IEntryPoint.UserOpsPerAggregator[]
-            memory opas = new IEntryPoint.UserOpsPerAggregator[](1);
-        IEntryPoint.UserOpsPerAggregator memory opa = IEntryPoint
-            .UserOpsPerAggregator(ops, IAggregator(agg), signature);
-        opas[0] = opa;
-        entry.handleAggregatedOps(opas, payable(acc));
+        entry.handleOps(ops, payable(address(1)));
         assertEq(dest.balance, 10);
     }
 }

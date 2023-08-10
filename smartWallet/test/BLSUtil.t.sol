@@ -5,11 +5,12 @@ import "../src/interfaces/UserOperation.sol";
 import "../src/bls/lib/BLSOpen.sol";
 import "../src/bls/IBLSAccount.sol";
 
-bytes32 constant BLS_DOMAIN = keccak256("eip4337.bls.domain");
 using UserOperationLib for UserOperation;
 
 contract BLSUtil {
-    function signUserOp(
+    bytes32 blsDomain = keccak256("eip4337.bls.domain");
+
+    function signUserOpAggr(
         UserOperation calldata userOp,
         uint256 key,
         address aggregator
@@ -22,7 +23,7 @@ contract BLSUtil {
             abi.encode(internalOpHash, publicKeyHash, aggregator, block.chainid)
         );
         uint256[2] memory message = BLSOpen.hashToPoint(
-            BLS_DOMAIN,
+            blsDomain,
             abi.encodePacked(userOpHash)
         );
         (uint256 x, uint256 y) = ecMul(
@@ -36,6 +37,31 @@ contract BLSUtil {
         UserOperation memory mUserOp = userOp;
         mUserOp.signature = signature;
         return (mUserOp, signature);
+    }
+
+    function signUserOp(
+        UserOperation calldata userOp,
+        address entryPoint,
+        uint256 key
+    ) public view returns (UserOperation memory, bytes32) {
+        bytes32 userOpHash = keccak256(
+            abi.encode(userOp.hash(), entryPoint, block.chainid)
+        );
+        uint256[2] memory message = BLSOpen.hashToPoint(
+            blsDomain,
+            abi.encodePacked(userOpHash)
+        );
+        (uint256 x, uint256 y) = ecMul(
+            key,
+            message[0],
+            message[1],
+            0x0000000000000000000000000000000000000000000000000000000000000000,
+            21888242871839275222246405745257275088696311157297823662689037894645226208583
+        );
+        bytes memory signature = abi.encodePacked(x, y);
+        UserOperation memory mUserOp = userOp;
+        mUserOp.signature = signature;
+        return (mUserOp, userOpHash);
     }
 
     /// @dev Multiply point (x1, y1, z1) times d in affine coordinates.

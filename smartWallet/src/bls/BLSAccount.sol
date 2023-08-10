@@ -2,7 +2,9 @@
 pragma solidity ^0.8.12;
 
 import "../SmartWalletLogic.sol";
+import "./lib/BLSOpen.sol";
 import "./IBLSAccount.sol";
+bytes32 constant BLS_DOMAIN = keccak256("eip4337.bls.domain");
 
 /**
  * Minimal BLS-based account that uses an aggregated signature.
@@ -50,6 +52,21 @@ contract BLSAccount is SmartWalletLogic, IBLSAccount {
                     pubKeyHash,
                 "wrong pubkey"
             );
+        }
+        if (aggregator == address(0)) {
+            uint256[2] memory blsSignature = abi.decode(
+                userOp.signature,
+                (uint256[2])
+            );
+            uint256[2] memory message = BLSOpen.hashToPoint(
+                BLS_DOMAIN,
+                abi.encodePacked(userOpHash)
+            );
+
+            if (!BLSOpen.verifySingle(blsSignature, publicKey, message)) {
+                return SIG_VALIDATION_FAILED;
+            }
+            return 0;
         }
         return _packValidationData(ValidationData(aggregator, 0, 0));
     }
