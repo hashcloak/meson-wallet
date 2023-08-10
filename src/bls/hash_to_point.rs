@@ -1,9 +1,12 @@
-use crate::bls::FIELD_ORDER;
 use ark_bn254::{Fq, G1Affine};
 use ark_ec::CurveGroup;
 use ark_ff::fields::Field;
 use ethers::core::k256::sha2::{Digest, Sha256};
 use num_bigint::BigUint;
+
+//order of Fq
+pub const FIELD_ORDER: &[u8] = b"30644e72e131a029b85045b68181585d97816a916871ca8d3c208c16d87cfd47";
+pub const DOMAIN: &[u8] = b"eip4337.bls.domain";
 
 //Fouque-Tibouchi Hash to Curve
 pub fn hash_to_point(msg: &[u8], domain: &[u8]) -> G1Affine {

@@ -1,4 +1,4 @@
-use crate::user_opertaion;
+use crate::user_opertaion::{self, UserOperation};
 use ethers::prelude::{Address, U256};
 use serde::ser::SerializeSeq;
 use serde::{Deserialize, Serialize};
@@ -32,6 +32,14 @@ pub struct ERC4337Error {
     pub data: String,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SkCipher {
+    pub cipher: String,
+    pub mac: String,
+    pub salt: String,
+    pub iv: String,
+}
+
 impl std::error::Error for ERC4337Error {}
 impl fmt::Display for ERC4337Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -42,7 +50,15 @@ impl fmt::Display for ERC4337Error {
 pub trait Account {
     fn create_init_code(&self) -> Vec<u8>;
 
-    fn get_create2_address(&self) -> Address;
+    fn sign(&self, user_op: &UserOperation, password: &str) -> Vec<u8>;
 
-    fn sign(&self, msg: &[u8]) -> Vec<u8>;
+    fn address(&self) -> Address;
+
+    fn entry_point(&self) -> Address;
+
+    fn chain_id(&self) -> U256; //todo: does account need to hold chain_id?
+
+    fn salt(&self) -> U256;
+
+    fn deployed(&self) -> bool; //todo: does account need to hold deployed status?
 }

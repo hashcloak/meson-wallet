@@ -1,4 +1,5 @@
-use crate::bls::{hash_to_fr, hash_to_point, to_uncompressed_g1, PrivateKey, PublicKey, DOMAIN};
+use crate::bls::hash_to_point::{hash_to_point, DOMAIN};
+use crate::bls::sig::{hash_to_fr, to_uncompressed_g1, PrivateKey, PublicKey};
 use ark_bn254::{Fr, G1Projective, G2Projective};
 use ark_ec::CurveGroup;
 use ark_ff::Zero;
@@ -64,7 +65,7 @@ pub fn multi_sig_combine_sig(sigs: &[G1Projective]) -> Vec<u8> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::bls::verify;
+    use crate::bls::sig::verify;
     #[test]
     pub fn test_multi_sig() {
         let mut rng = rand::thread_rng();

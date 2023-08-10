@@ -130,13 +130,13 @@ impl UserOperation {
     }
 
     ///For lighter signature scheme
-    pub fn pack_into(mut self) -> Vec<u8> {
+    pub fn pack(&self) -> Vec<u8> {
         let user_operation_packed = UserOperationUnsigned::from(self.clone());
         user_operation_packed.encode()
     }
 
-    pub fn hash(mut self) -> [u8; 32] {
-        let bytes = self.pack_into();
+    pub fn hash(&self) -> [u8; 32] {
+        let bytes = self.pack();
         let hash = keccak256(bytes);
         hash
     }
@@ -194,7 +194,7 @@ mod tests {
 
         user_op = user_op.signature(Bytes::default());
         //let encode_byte = user_op.encode();
-        let abiencode_op = user_op.pack_into();
+        let abiencode_op = user_op.pack();
         let b = Bytes::try_from(abiencode_op).unwrap().to_string();
         print!("{:?}", b);
     }
