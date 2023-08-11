@@ -61,4 +61,6 @@ pub trait Account {
     fn salt(&self) -> U256;
 
     fn deployed(&self) -> bool; //todo: does account need to hold deployed status?
+
+    fn set_deployed(&mut self, status: bool); //update and save deployed status
 }

@@ -17,8 +17,8 @@ pub mod sig;
 
 const BLS_CREATE_ACCOUNT_SIGNATURE: &str = "0x19c2a1b2";
 const BLS_WALLET_LOGIC_INITIALIZE_SIGNATURE: &str = "0xee472f36";
-const BLS_ACCOUNT_FACTORY_ADDRESS: &str = "0x0f8458e544c9d4c7c25a881240727209caae20b8"; //loacl test only
-const BLS_ACCOUNT_IMPLEMENTATION: &str = "0x42add52666C78960A219b157a1F4DbF806CbF703"; //local test only //wallet logic address
+const BLS_ACCOUNT_FACTORY_ADDRESS: &str = "0x112a61EE7ba1461f287508f84f0FE994759354f7"; //loacl test only
+const BLS_ACCOUNT_IMPLEMENTATION: &str = "0xA44e03a76052d40bfCDfc0f670e185f84EB31CD8"; //local test only //wallet logic address
 
 #[derive(Deserialize, Serialize)]
 pub struct BLSAccount {
@@ -165,7 +165,7 @@ impl Account for BLSAccount {
             //todo: user_op_hash should follow ERC standard, consider update it in contract
             user_op_hash = keccak256(AbiEncode::encode((
                 user_op.hash(),
-                self.entry_point,
+                keccak256(AbiEncode::encode(self.public_key)),
                 self.aggregator,
                 self.chain_id,
             )));
@@ -182,6 +182,14 @@ impl Account for BLSAccount {
 
     fn deployed(&self) -> bool {
         self.deployed
+    }
+
+    fn set_deployed(&mut self, status: bool) {
+        self.deployed = status;
+        let account_dir = self.key_store_path.join("account");
+        let mut file = fs::File::create(account_dir).unwrap();
+        let contents = serde_json::to_string(self).unwrap();
+        file.write_all(contents.as_bytes()).unwrap();
     }
 
     fn entry_point(&self) -> Address {
@@ -207,7 +215,17 @@ mod test {
         let wallet = Erc4337Wallet::new(wallet_config_path);
         let path = wallet.key_store_path;
         // wallet.create_bls_account(None, "123456789");
-        let bls_account = BLSAccount::new(&path, None, None, U256::from(1), "123456789");
+        let bls_account = BLSAccount::new(
+            &path,
+            Some(
+                "0x3cD5A8Ddd0EFb5804978a4Da74D3Fb6d074829F3"
+                    .parse()
+                    .unwrap(),
+            ),
+            None,
+            U256::from(12345),
+            "123456789",
+        );
         let addr_str = "0x".to_owned() + &hex::encode(bls_account.address);
         let bls_account2 = BLSAccount::load_account(&path, &addr_str);
 

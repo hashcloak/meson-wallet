@@ -217,17 +217,17 @@ impl Erc4337Wallet {
         user_op = user_op.max_fee_per_gas(0xffffff);
 
         //set signature to random data for querying gas
-        user_op = user_op.signature(Bytes::from_str("0x43b8da28f2e270442c1618c6594a8b9c3cc44fd321d6135339be632af153e1fa5a00d1b1336d40091ae887b0b8d2a8a6f20b8d9818435196082f38cc46e0bad11b").unwrap());
-        let gas_info = self.g_query_gas_info(account, &user_op).await;
-        println!("{gas_info:?}");
+        // user_op = user_op.signature(Bytes::from_str("0x43b8da28f2e270442c1618c6594a8b9c3cc44fd321d6135339be632af153e1fa5a00d1b1336d40091ae887b0b8d2a8a6f20b8d9818435196082f38cc46e0bad11b").unwrap());
+        // let gas_info = self.g_query_gas_info(account, &user_op).await;
+        // println!("{gas_info:?}");
 
         //shoud set the gas price from gas_info (current stackup version doesn't work)
-        user_op = user_op
-            .call_gas_imit(gas_info.callGasLimit)
-            .verification_gas_limit(500000)
-            .pre_verification_gas(1000000)
-            .max_fee_per_gas(7000000000u64)
-            .max_priority_fee_per_gas(600000000);
+        // user_op = user_op
+        //     .call_gas_imit(gas_info.callGasLimit)
+        //     .verification_gas_limit(500000)
+        //     .pre_verification_gas(1000000)
+        //     .max_fee_per_gas(7000000000u64)
+        //     .max_priority_fee_per_gas(600000000);
 
         user_op = user_op
             .call_gas_imit(500000)
@@ -328,7 +328,8 @@ impl Erc4337Wallet {
         account: &P,
         user_op: &UserOperation,
     ) -> GasQueryResult {
-        let provider = Provider::try_from(BUNDLER_RPC_URL).unwrap();
+        let rpc_url = "http://localhost:4337";
+        let provider = Provider::try_from(rpc_url).unwrap();
         let query_result: GasQueryResult = provider
             .request(
                 "eth_estimateUserOperationGas",
@@ -375,6 +376,23 @@ impl Erc4337Wallet {
             let mut file = fs::File::create(&dir.join(&addr_str)).unwrap();
             let contents = serde_json::to_string(&account).unwrap();
             file.write_all(contents.as_bytes()).unwrap();
+        }
+        result
+    }
+
+    pub async fn g_send_op<P: Account>(&self, user_op: UserOperation, account: &mut P) -> String {
+        let rpc_url = BUNDLER_RPC_URL;
+        let provider = Provider::try_from(rpc_url).unwrap();
+        let result: String = provider
+            .request(
+                "eth_sendUserOperation",
+                json!([user_op, account.entry_point()]),
+            )
+            .await
+            .unwrap();
+
+        if !account.deployed() {
+            account.set_deployed(true);
         }
         result
     }
@@ -644,5 +662,30 @@ mod tests {
             .query_nonce("0xca45fe0684c78401e48c853fc911a93ef77a1b31".into())
             .await;
         println!("{}", nonce);
+    }
+
+    use crate::bls::BLSAccount;
+    #[tokio::test]
+    pub async fn test_BLS_send_op() {
+        let wallet_config_path = PathBuf::from("wallet_config.toml");
+        let wallet = Erc4337Wallet::new(wallet_config_path);
+        let path = &wallet.key_store_path;
+        let addr_str = "0x292d0be3b8b0a7f9b6c98ab73aef11198d976eda";
+        let mut bls_account = BLSAccount::load_account(&path, addr_str);
+        let (user_op, ophash) = wallet
+            .g_fill_op(
+                &bls_account,
+                "0x0000000000000000000000000000000000000467"
+                    .parse()
+                    .unwrap(),
+                U256::from_dec_str("111").unwrap(),
+                "123456789",
+                None,
+            )
+            .await;
+
+        let result = wallet.g_send_op(user_op, &mut bls_account).await;
+        println!("{}", result);
+        println!("{}", ophash);
     }
 }
