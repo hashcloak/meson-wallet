@@ -23,9 +23,9 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
-const DEFAULT_KEY_SIZE: usize = 32usize;
+const DEFAULT_KEY_SIZE: usize = 48usize;
 const DEFAULT_IV_SIZE: usize = 16usize;
-const DEFAULT_KDF_PARAMS_DKLEN: u8 = 32u8;
+const DEFAULT_KDF_PARAMS_DKLEN: u8 = 48u8;
 const DEFAULT_KDF_PARAMS_LOG_N: u8 = 13u8;
 const DEFAULT_KDF_PARAMS_R: u32 = 8u32;
 const DEFAULT_KDF_PARAMS_P: u32 = 1u32;
@@ -35,6 +35,7 @@ const DEFAULT_KDF_PARAMS_P: u32 = 1u32;
 type BLSPublicKey = [U256; 4];
 
 type Aes128Ctr = ctr::Ctr64LE<aes::Aes128>;
+type Aes256Ctr = ctr::Ctr64LE<aes::Aes256>;
 
 #[derive(Deserialize)]
 pub struct Erc4337Wallet {
@@ -166,10 +167,6 @@ impl Erc4337Wallet {
         let password = cli::prompt_password_confirm().unwrap();
 
         let owner_wallet = Wallet::decrypt_keystore(keypath, password).unwrap();
-        // let owner_wallet: Wallet<SigningKey> =
-        //     "d5d81bccdb261aa45fc232b15689d29b60dca53c5329d52081a911731fb5112b"
-        //         .parse()
-        //         .unwrap();
         let (signature, op_hash) = self.light_sign(op_clone, owner_wallet, account, chain_id);
         user_op = user_op.signature(signature.to_vec());
         let hash_str = hex::encode(op_hash);
@@ -221,7 +218,7 @@ impl Erc4337Wallet {
         // let gas_info = self.g_query_gas_info(account, &user_op).await;
         // println!("{gas_info:?}");
 
-        //shoud set the gas price from gas_info (current stackup version doesn't work)
+        // //shoud set the gas price from gas_info (current stackup version doesn't work)
         // user_op = user_op
         //     .call_gas_imit(gas_info.callGasLimit)
         //     .verification_gas_limit(500000)
@@ -248,6 +245,44 @@ impl Erc4337Wallet {
             account.chain_id(),
         ))));
         (user_op, user_op_hash)
+    }
+
+    pub async fn g_fill_tornado_deposit_user_op<P: Account>(
+        &self,
+        eth_amount: &str,
+        account: &P,
+        password: &str,
+        tornado_addr: Address,
+    ) -> (UserOperation, String) {
+        let tor_deposit = Deposit::new();
+        let tx = tor_deposit.gen_deposit_tx(None, eth_amount, account.chain_id().as_u64());
+        let (user_op, hash_str) = self
+            .g_fill_op(
+                account,
+                tornado_addr,
+                ethers::utils::parse_ether(eth_amount).unwrap(),
+                password,
+                Some(tx),
+            )
+            .await;
+
+        (user_op, hash_str)
+    }
+
+    pub async fn g_fill_tornado_withdraw_user_op<P: Account>(
+        &self,
+        tor_note: &str,
+        recipient: Address,
+        account: &P,
+        password: &str,
+        tornado_addr: Address,
+    ) -> (UserOperation, String) {
+        let tx = Deposit::parse_and_withdraw(tor_note, recipient, None, None, None).await;
+        let (user_op, hash_str) = self
+            .g_fill_op(account, tornado_addr, 0.into(), password, Some(tx))
+            .await;
+
+        (user_op, hash_str)
     }
 
     pub async fn fill_tornado_deposit_user_op(
@@ -434,12 +469,12 @@ impl Erc4337Wallet {
         let mut iv = vec![0u8; DEFAULT_IV_SIZE];
         rng.fill_bytes(iv.as_mut_slice());
         let ciphertext: &mut [u8] = sk.as_mut();
-        let mut encrypter = Aes128Ctr::new((&key[..16]).into(), (&iv[..16]).into());
+        let mut encrypter = Aes256Ctr::new((&key[..32]).into(), (&iv[..16]).into());
         encrypter.apply_keystream(ciphertext);
 
         // Calculate the MAC.
         let mac = Keccak256::new()
-            .chain_update(&key[16..32])
+            .chain_update(&key[32..48])
             .chain_update(&ciphertext)
             .finalize();
         let mac = Base64::encode_string(&mac);
@@ -483,13 +518,13 @@ impl Erc4337Wallet {
 
         //Derive and compare the mac
         let mac = Keccak256::new()
-            .chain_update(&key[16..32])
+            .chain_update(&key[32..48])
             .chain_update(&cipher)
             .finalize();
         let mac = Base64::encode_string(&mac);
 
         //Decrypt the mnemonic
-        let mut decryptor = Aes128Ctr::new((&key[..16]).into(), (&iv[..16]).into());
+        let mut decryptor = Aes256Ctr::new((&key[..32]).into(), (&iv[..16]).into());
         decryptor.apply_keystream(&mut cipher);
         // let sk = PrivateKey::from_bytes(&cipher);
 
@@ -643,8 +678,8 @@ mod tests {
         let mut account = wallet.load_account("0x0009b114f7f9b054b30f1cdc18080e115e14fd51".into());
         let (user_op, op_hash) = wallet
         .fill_tornado_withdraw_user_op(
-            "tornado-eth-0.1-12345-0xb232192e07b6122f607f016871658e8fc602696738064ca18acc275968f6006d98a270ffbccba51af4c9d668eda576592eb7cfe42d47913b8175c6f27b39",
-             "0x0000000000000000000000000000000000000087".parse().unwrap(),
+            "tornado-eth-0.1-12345-0x7afd6fe7a97dd8f87b895697222cdb584cc9fdb44e0435f05890b500a69e52dd1e119e86328c7244d104798a1aea6f980f59cdf98ea3f2efa43fc0dd84e7",
+             "0x0000000000000000000000000000000000000187".parse().unwrap(),
               12345,
                &account,
                 tornado_util::TORNADO_ADDRESS.parse().unwrap(),
@@ -687,5 +722,73 @@ mod tests {
         let result = wallet.g_send_op(user_op, &mut bls_account).await;
         println!("{}", result);
         println!("{}", ophash);
+    }
+
+    use crate::simple_account::SimpleAccount;
+    #[tokio::test]
+    pub async fn test_simple_send_op() {
+        let wallet_config_path = PathBuf::from("wallet_config.toml");
+        let wallet = Erc4337Wallet::new(wallet_config_path);
+        let path = &wallet.key_store_path;
+        let addr_str = "0x96b47a75bfa193f805baf9956ad46d9b038f1678";
+        let mut account = SimpleAccount::load_account(&path, addr_str);
+        let (user_op, ophash) = wallet
+            .g_fill_op(
+                &account,
+                "0x0000000000000000000000000000000000000918"
+                    .parse()
+                    .unwrap(),
+                U256::from_dec_str("131").unwrap(),
+                "123456789",
+                None,
+            )
+            .await;
+
+        let result = wallet.g_send_op(user_op, &mut account).await;
+        println!("{}", result);
+        println!("{}", ophash);
+    }
+
+    #[tokio::test]
+    //test sending tornado cash deposit user_op
+    //for some version of bundler, needs to disable gas query to endable tornado cash
+    pub async fn test_g_tornado_deposit() {
+        let wallet_config_path = PathBuf::from("wallet_config.toml");
+        let wallet = Erc4337Wallet::new(wallet_config_path);
+        let path = &wallet.key_store_path;
+        let addr_str = "0x96b47a75bfa193f805baf9956ad46d9b038f1678";
+        let mut account = SimpleAccount::load_account(&path, addr_str);
+        let (user_op, op_hash) = wallet
+            .g_fill_tornado_deposit_user_op(
+                "0.1",
+                &account,
+                "123456789",
+                tornado_util::TORNADO_ADDRESS.parse().unwrap(),
+            )
+            .await;
+        let result = wallet.g_send_op(user_op, &mut account).await;
+        println!("{}", result);
+    }
+
+    #[tokio::test]
+    //test sending tornado cash withdraw user_op
+    //for some version of bundler, needs to disable gas query to endable tornado cash
+    pub async fn test_g_tornado_withdraw() {
+        let wallet_config_path = PathBuf::from("wallet_config.toml");
+        let wallet = Erc4337Wallet::new(wallet_config_path);
+        let path = &wallet.key_store_path;
+        let addr_str = "0x96b47a75bfa193f805baf9956ad46d9b038f1678";
+        let mut account = SimpleAccount::load_account(&path, addr_str);
+        let (user_op, op_hash) = wallet
+        .g_fill_tornado_withdraw_user_op(
+            "tornado-eth-0.1-12345-0x0f976955390b0e31567e9f7c6ea8c740e896f1b43af3de2bcb77ab7bd6a295d98ce1cf6c9f590d7a30ea621806d65c4885dc243a088109bdb50b9f86c910",
+             "0x0000000000000000000000000000000000000187".parse().unwrap(),
+               &account,
+               "123456789",
+               tornado_util::TORNADO_ADDRESS.parse().unwrap(),
+            )
+            .await;
+        let result = wallet.g_send_op(user_op, &mut account).await;
+        println!("{}", result);
     }
 }

@@ -90,6 +90,7 @@ impl Deposit {
         refund: Option<U256>,
     ) -> Vec<u8> {
         let deposit = Self::parse_note(note);
+        println!("comm:{}", deposit.commitment_hex);
         deposit
             .gen_withdraw_tx(recipient, relayer, fee, refund)
             .await
@@ -167,6 +168,7 @@ pub async fn generate_merkle_proof(deposit: &Deposit) -> (Vec<mimc_fr>, Vec<u128
         .event("Deposit(bytes32,uint32,uint256)")
         .from_block(0);
     let mut logs = client.get_logs(&filter).await.unwrap();
+    println!("len: {}", logs.len());
     logs.sort_by(|a, b| {
         U256::from_big_endian(&a.data[28..32])
             .partial_cmp(&U256::from_big_endian(&b.data[28..32]))
@@ -180,10 +182,11 @@ pub async fn generate_merkle_proof(deposit: &Deposit) -> (Vec<mimc_fr>, Vec<u128
     let mut index = 0u128;
     for i in 0..leaves.len() {
         if format!("0x{}", ff_ce::to_hex(&leaves[i])) == deposit.commitment_hex {
+            println!("found: 0x{}", ff_ce::to_hex(&leaves[i]));
             index = i.try_into().unwrap();
             break;
         }
-        if i == leaves.len() {
+        if i == leaves.len() - 1 {
             panic!("No commitment found");
         }
     }
