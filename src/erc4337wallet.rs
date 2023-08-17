@@ -1,25 +1,18 @@
-use crate::cli;
-use crate::create_sender_util::{bls_create2addr, create2addr, create_init_code};
-use crate::erc4337_common::{Account, ERC4337Error, GasQueryResult, SkCipher};
+use crate::erc4337_common::{Account, GasQueryResult, SkCipher};
 use crate::tornado_util::Deposit;
 use crate::user_opertaion::UserOperation;
 use aes::cipher::{KeyIvInit, StreamCipher};
 use base64ct::{Base64, Encoding};
 use ethers::abi::AbiEncode;
-use ethers::prelude::k256::ecdsa::SigningKey;
-use ethers::prelude::{Address, Bytes, Provider, Signature, Wallet, U256};
-use ethers::signers::Signer;
+use ethers::prelude::{Address, Bytes, Provider, U256};
 use ethers::utils::keccak256;
 use ethers::utils::{__serde_json::json, hex};
-use futures::executor::block_on;
-use rand::random;
 use rand::{CryptoRng, Rng};
 use scrypt::{scrypt, Params as ScryptParams};
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use sha3::{Digest, Keccak256};
 use std::collections::HashMap;
 use std::fs;
-use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
@@ -49,14 +42,6 @@ pub struct ChainInfo {
     Ticker: String,
     Endpoint: String,
 }
-#[derive(Deserialize, Serialize)]
-pub struct SimpleAccount {
-    address: Address,
-    owner: Address,
-    entry_point: Address,
-    salt: U256,
-    deployed: bool,
-}
 
 const EXECUTE_SIGNATURE: &str = "b61d27f6";
 const NODE_RPC_URL: &str = "http://localhost:8545"; //test only, should handle by meson
@@ -70,111 +55,7 @@ impl Erc4337Wallet {
         smart_wallet
     }
 
-    pub fn create_account(&self, owner: Address, entry_point: Option<Address>) -> SimpleAccount {
-        let salt: u128 = random();
-        let salt = U256::from(salt);
-        let address: Address = create2addr(owner, salt);
-        //todo: move entry point to wallet setting
-        let entry_point = match entry_point {
-            Some(addr) => addr,
-            None => Address::from_str("0x0576a174D229E3cFA37253523E645A78A0C91B57").unwrap(),
-        };
-        let account = SimpleAccount {
-            address,
-            owner,
-            entry_point,
-            salt,
-            deployed: false,
-        };
-        let dir = self.key_store_path.join("smart_accounts");
-        fs::create_dir_all(&dir).unwrap();
-        let addr_str = "0x".to_owned() + &hex::encode(account.address);
-        let mut file = fs::File::create(&dir.join(&addr_str)).unwrap();
-        let contents = serde_json::to_string(&account).unwrap();
-        file.write_all(contents.as_bytes()).unwrap();
-        account
-    }
-
-    //test only, should sendthrough meson
-    //send_tx without paymaster
-    pub async fn fill_user_op(
-        &self,
-        account: &SimpleAccount,
-        to: Address,
-        amount: U256,
-        chain_id: U256,
-        data: Option<Vec<u8>>,
-    ) -> (UserOperation, String) {
-        let mut user_op = UserOperation::new();
-        //only include initcode if not deployed yet
-        user_op = if !account.deployed {
-            let initcode = create_init_code(account.owner, account.salt);
-            user_op.init_code(initcode)
-        } else {
-            user_op
-        };
-        user_op = user_op.sender(account.address);
-
-        //query nonce only if deployed
-        user_op = user_op.nonce(0);
-        if account.deployed {
-            let addr_str = "0x".to_owned() + &hex::encode(account.address);
-            let nonce = self.query_nonce(addr_str).await;
-            user_op = user_op.nonce(nonce);
-        }
-
-        //create calldata
-        let mut func_signature = Bytes::from_str(EXECUTE_SIGNATURE).unwrap().to_vec();
-        let mut param;
-        match data {
-            Some(n) => param = AbiEncode::encode((to, amount, Bytes::from(n))),
-            None => param = AbiEncode::encode((to, amount, Bytes::default())),
-        }
-        let call_data = [func_signature, param].concat();
-        user_op = user_op.call_data(call_data);
-        user_op = user_op.verification_gas_limit(0xffffff);
-        user_op = user_op.pre_verification_gas(0xffffff);
-        user_op = user_op.max_fee_per_gas(0xffffff);
-
-        //set signature to random data for querying gas
-        user_op = user_op.signature(Bytes::from_str("0x43b8da28f2e270442c1618c6594a8b9c3cc44fd321d6135339be632af153e1fa5a00d1b1336d40091ae887b0b8d2a8a6f20b8d9818435196082f38cc46e0bad11b").unwrap());
-        let gas_info = self.query_gas_info(account, &user_op).await;
-        println!("{gas_info:?}");
-
-        //shoud set the gas price from gas_info (current stackup version doesn't work)
-        user_op = user_op
-            .call_gas_imit(gas_info.callGasLimit)
-            .verification_gas_limit(500000)
-            .pre_verification_gas(1000000)
-            .max_fee_per_gas(7000000000u64)
-            .max_priority_fee_per_gas(600000000);
-
-        //set signature to empty bytes for signing
-        user_op = user_op.signature(Bytes::default());
-        let op_clone = user_op.clone();
-
-        let owner_addr_str = "0x".to_owned() + &hex::encode(account.owner);
-        let mut keypath = self
-            .key_store_path
-            .join("keystore")
-            .join(owner_addr_str.clone());
-        if !keypath.exists() {
-            keypath = self
-                .key_store_path
-                .join("imported_keystore")
-                .join(owner_addr_str);
-        }
-        let password = cli::prompt_password_confirm().unwrap();
-
-        let owner_wallet = Wallet::decrypt_keystore(keypath, password).unwrap();
-        let (signature, op_hash) = self.light_sign(op_clone, owner_wallet, account, chain_id);
-        user_op = user_op.signature(signature.to_vec());
-        let hash_str = hex::encode(op_hash);
-        println!("{user_op:?}");
-        (user_op, hash_str)
-    }
-
-    pub async fn g_fill_op<P: Account>(
+    pub async fn fill_user_op<P: Account>(
         &self,
         account: &P,
         to: Address,
@@ -214,29 +95,20 @@ impl Erc4337Wallet {
         user_op = user_op.max_fee_per_gas(0xffffff);
 
         //set signature to random data for querying gas
-        // user_op = user_op.signature(Bytes::from_str("0x43b8da28f2e270442c1618c6594a8b9c3cc44fd321d6135339be632af153e1fa5a00d1b1336d40091ae887b0b8d2a8a6f20b8d9818435196082f38cc46e0bad11b").unwrap());
-        // let gas_info = self.g_query_gas_info(account, &user_op).await;
-        // println!("{gas_info:?}");
+        user_op = user_op.signature(Bytes::from_str("0x43b8da28f2e270442c1618c6594a8b9c3cc44fd321d6135339be632af153e1fa5a00d1b1336d40091ae887b0b8d2a8a6f20b8d9818435196082f38cc46e0bad11b").unwrap());
+        let gas_info = self.query_gas_info(account, &user_op).await;
+        println!("{gas_info:?}");
 
         // //shoud set the gas price from gas_info (current stackup version doesn't work)
-        // user_op = user_op
-        //     .call_gas_imit(gas_info.callGasLimit)
-        //     .verification_gas_limit(500000)
-        //     .pre_verification_gas(1000000)
-        //     .max_fee_per_gas(7000000000u64)
-        //     .max_priority_fee_per_gas(600000000);
-
         user_op = user_op
-            .call_gas_imit(500000)
-            .verification_gas_limit(500000)
-            .pre_verification_gas(1000000)
-            .max_fee_per_gas(7000000000u64)
-            .max_priority_fee_per_gas(600000000);
+            .call_gas_imit(1500000)
+            .verification_gas_limit(1500000)
+            .pre_verification_gas(1500000)
+            .max_fee_per_gas(100)
+            .max_priority_fee_per_gas(100);
 
         //set signature to empty bytes for signing
         user_op = user_op.signature(Bytes::default());
-        //let op_clone = user_op.clone();
-
         let sig = account.sign(&user_op, password);
         let user_op = user_op.signature(sig);
         let user_op_hash = hex::encode(keccak256(AbiEncode::encode((
@@ -247,7 +119,7 @@ impl Erc4337Wallet {
         (user_op, user_op_hash)
     }
 
-    pub async fn g_fill_tornado_deposit_user_op<P: Account>(
+    pub async fn fill_tornado_deposit_user_op<P: Account>(
         &self,
         eth_amount: &str,
         account: &P,
@@ -257,7 +129,7 @@ impl Erc4337Wallet {
         let tor_deposit = Deposit::new();
         let tx = tor_deposit.gen_deposit_tx(None, eth_amount, account.chain_id().as_u64());
         let (user_op, hash_str) = self
-            .g_fill_op(
+            .fill_user_op(
                 account,
                 tornado_addr,
                 ethers::utils::parse_ether(eth_amount).unwrap(),
@@ -269,7 +141,7 @@ impl Erc4337Wallet {
         (user_op, hash_str)
     }
 
-    pub async fn g_fill_tornado_withdraw_user_op<P: Account>(
+    pub async fn fill_tornado_withdraw_user_op<P: Account>(
         &self,
         tor_note: &str,
         recipient: Address,
@@ -279,86 +151,13 @@ impl Erc4337Wallet {
     ) -> (UserOperation, String) {
         let tx = Deposit::parse_and_withdraw(tor_note, recipient, None, None, None).await;
         let (user_op, hash_str) = self
-            .g_fill_op(account, tornado_addr, 0.into(), password, Some(tx))
+            .fill_user_op(account, tornado_addr, 0.into(), password, Some(tx))
             .await;
 
         (user_op, hash_str)
     }
 
-    pub async fn fill_tornado_deposit_user_op(
-        &self,
-        eth_amount: &str,
-        net_id: u64,
-        account: &SimpleAccount,
-        tornado_addr: Address,
-    ) -> (UserOperation, String) {
-        let tor_deposit = Deposit::new();
-        let tx = tor_deposit.gen_deposit_tx(None, eth_amount, net_id);
-        let (user_op, hash_str) = self
-            .fill_user_op(
-                account,
-                tornado_addr,
-                ethers::utils::parse_ether(eth_amount).unwrap(),
-                net_id.into(),
-                Some(tx),
-            )
-            .await;
-
-        (user_op, hash_str)
-    }
-
-    pub async fn fill_tornado_withdraw_user_op(
-        &self,
-        tor_note: &str,
-        recipient: Address,
-        net_id: u64,
-        account: &SimpleAccount,
-        tornado_addr: Address,
-    ) -> (UserOperation, String) {
-        let tx = Deposit::parse_and_withdraw(tor_note, recipient, None, None, None).await;
-        let (user_op, hash_str) = self
-            .fill_user_op(account, tornado_addr, 0.into(), net_id.into(), Some(tx))
-            .await;
-
-        (user_op, hash_str)
-    }
-
-    pub fn light_sign(
-        &self,
-        user_op: UserOperation,
-        owner_wallet: Wallet<SigningKey>,
-        account: &SimpleAccount,
-        chain_id: U256,
-    ) -> (Signature, [u8; 32]) {
-        let op_hash = keccak256(AbiEncode::encode((
-            user_op.hash(),
-            account.entry_point,
-            chain_id,
-        )));
-        let signature: Signature = block_on(owner_wallet.sign_message(op_hash)).unwrap();
-        (signature, op_hash)
-    }
-
-    //test only, should query through meson
-    pub async fn query_gas_info(
-        &self,
-        account: &SimpleAccount,
-        user_op: &UserOperation,
-    ) -> GasQueryResult {
-        let rpc_url = "http://localhost:4337";
-        //let rpc_url = "https://node.stackup.sh/v1/rpc/9c21ff1cba3a5407d43324bfc6718044de9203b2b6fb09aac8b52a7d7496bdf5";
-        let provider = Provider::try_from(rpc_url).unwrap();
-        let query_result: GasQueryResult = provider
-            .request(
-                "eth_estimateUserOperationGas",
-                json!([user_op, account.entry_point]),
-            )
-            .await
-            .unwrap();
-        query_result
-    }
-
-    pub async fn g_query_gas_info<P: Account>(
+    pub async fn query_gas_info<P: Account>(
         &self,
         account: &P,
         user_op: &UserOperation,
@@ -393,28 +192,6 @@ impl Erc4337Wallet {
         nonce
     }
 
-    pub async fn send_op(&self, user_op: UserOperation, account: &mut SimpleAccount) -> String {
-        let rpc_url = "http://localhost:4337";
-        let provider = Provider::try_from(rpc_url).unwrap();
-        let result: String = provider
-            .request(
-                "eth_sendUserOperation",
-                json!([user_op, account.entry_point]),
-            )
-            .await
-            .unwrap();
-
-        if !account.deployed {
-            account.deployed = true;
-            let dir = self.key_store_path.join("smart_accounts");
-            let addr_str = "0x".to_owned() + &hex::encode(account.address);
-            let mut file = fs::File::create(&dir.join(&addr_str)).unwrap();
-            let contents = serde_json::to_string(&account).unwrap();
-            file.write_all(contents.as_bytes()).unwrap();
-        }
-        result
-    }
-
     pub async fn g_send_op<P: Account>(&self, user_op: UserOperation, account: &mut P) -> String {
         let rpc_url = BUNDLER_RPC_URL;
         let provider = Provider::try_from(rpc_url).unwrap();
@@ -431,18 +208,6 @@ impl Erc4337Wallet {
         }
         result
     }
-
-    pub fn load_account(&self, smart_account_addr: String) -> SimpleAccount {
-        let dir = self
-            .key_store_path
-            .join("smart_accounts")
-            .join(smart_account_addr);
-        let toml_str = fs::read_to_string(dir).unwrap();
-        let account: SimpleAccount = serde_json::from_str(&toml_str).unwrap();
-        account
-    }
-
-    // pub fn load_account_t(&self, )
 
     pub fn encrypt_key<P, R, S, T>(dir: P, rng: &mut R, mut sk: S, password: T) -> Result<(), ()>
     where
@@ -547,147 +312,31 @@ mod tests {
     use std::sync::Arc;
     const RPC_URL: &str = "https://eth.llamarpc.com";
 
-    //test create basic smart contract account
-    #[test]
-    pub fn test_create_account() {
-        let wallet_config_path = PathBuf::from("wallet_config.toml");
-        let wallet = Erc4337Wallet::new(wallet_config_path);
-        let owner = Address::from_str("1f0bdb0533b9ab79c891e65ac3ad3df4cd164b50").unwrap();
-        wallet.create_account(
-            owner,
-            Some(
-                "0x3cD5A8Ddd0EFb5804978a4Da74D3Fb6d074829F3"
-                    .parse()
-                    .unwrap(),
-            ),
-        );
-    }
-
-    #[tokio::test]
-    pub async fn test_rpc() {
-        //let rpc_url = "https://eth.llamarpc.com";
-        //let rpc_url = "https://node.stackup.sh/v1/rpc/9c21ff1cba3a5407d43324bfc6718044de9203b2b6fb09aac8b52a7d7496bdf5";
-        let rpc_url = "http://localhost:4337";
-        let provider = Provider::try_from(rpc_url).unwrap();
-        let op = UserOperation::new();
-        let block_number: Result<GasQueryResult, ProviderError> = provider
-            .request(
-                "eth_sendUserOperation",
-                json!([{"callData":"0xb61d27f60000000000000000000000007a531c4f680ff73ca991557f5ee274744a696517000000000000000000000000000000000000000000000000000000000000000a00000000000000000000000000000000000000000000000000000000000000600000000000000000000000000000000000000000000000000000000000000000",
-                "callGasLimit":44980,
-                "initCode":"0x3b65465fa21686034605f7cf4c9edc6c4ca133725fbfb9cf0000000000000000000000001f0bdb0533b9ab79c891e65ac3ad3df4cd164b50000000000000000000000000000000003932ea3bfa1f9fb389748e004491266c",
-                "maxFeePerGas":44980,
-                "maxPriorityFeePerGas":44980,
-                "nonce":"0x0","paymasterAndData":"0x",
-                "preVerificationGas": 45028,
-                "sender":"0x1795a0cd3df0fca0b3b0a3c4f7f8721839f2e2de",
-                "signature":"0x43b8da28f2e270442c1618c6594a8b9c3cc44fd321d6135339be632af153e1fa5a00d1b1336d40091ae887b0b8d2a8a6f20b8d9818435196082f38cc46e0bad11b",
-                "verificationGasLimit":1500000},
-                "0x8944bd0fed9732f99c5a5a4b5d730a1b7f45783c"]),
-            )
-            .await;
-
-        let r: GasQueryResult;
-
-        match block_number {
-            Ok(gas_result) => println!("{:?}", gas_result),
-            Err(E) => match E {
-                ProviderError::JsonRpcClientError(mes) => {
-                    let res: String = mes.to_string();
-                    println!("{:?}", res);
-                }
-                _ => panic!("{}", E),
-            },
-        };
-    }
-
-    #[tokio::test]
-    pub async fn test_query_gas() {
-        let wallet_config_path = PathBuf::from("wallet_config.toml");
-        let wallet = Erc4337Wallet::new(wallet_config_path);
-        let owner = Address::from_str("1F0BDb0533b9aB79c891E65aC3ad3df4cd164B50").unwrap();
-        let account = wallet.create_account(
-            owner,
-            Option::Some(
-                "0xe78A0F7E598Cc8b0Bb87894B0F60dD2a88d6a8Ab"
-                    .parse()
-                    .unwrap(),
-            ),
-        );
-        wallet
-            .fill_user_op(
-                &account,
-                "0x0000000000000000000000000000000000000001"
-                    .parse()
-                    .unwrap(),
-                U256::from_dec_str("10").unwrap(),
-                5777.into(),
-                None,
-            )
-            .await;
-    }
-
-    //test sending user_op (needs to set bundler url in send_op())
-    #[tokio::test]
-    pub async fn test_send_userop() {
-        let wallet_config_path = PathBuf::from("wallet_config.toml");
-        let wallet = Erc4337Wallet::new(wallet_config_path);
-        let mut account = wallet.load_account("0x0009b114f7f9b054b30f1cdc18080e115e14fd51".into());
-        let (user_op, ophash) = wallet
-            .fill_user_op(
-                &account,
-                "0x0000000000000000000000000000000000000012"
-                    .parse()
-                    .unwrap(),
-                U256::from_dec_str("10").unwrap(),
-                12345.into(),
-                None,
-            )
-            .await;
-
-        let result = wallet.send_op(user_op, &mut account).await;
-        println!("{}", result);
-        println!("{}", ophash);
-    }
-
-    #[tokio::test]
-    //test sending tornado cash deposit user_op
-    //for some version of bundler, needs to disable gas query to endable tornado cash
-    pub async fn test_tornado_deposit() {
-        let wallet_config_path = PathBuf::from("wallet_config.toml");
-        let wallet = Erc4337Wallet::new(wallet_config_path);
-        let mut account = wallet.load_account("0x0009b114f7f9b054b30f1cdc18080e115e14fd51".into());
-        let (user_op, op_hash) = wallet
-            .fill_tornado_deposit_user_op(
-                "0.1",
-                12345,
-                &account,
-                tornado_util::TORNADO_ADDRESS.parse().unwrap(),
-            )
-            .await;
-        let result = wallet.send_op(user_op, &mut account).await;
-        println!("{}", result);
-    }
-
-    #[tokio::test]
-    //test sending tornado cash withdraw user_op
-    //for some version of bundler, needs to disable gas query to endable tornado cash
-    pub async fn test_tornado_withdraw() {
-        let wallet_config_path = PathBuf::from("wallet_config.toml");
-        let wallet = Erc4337Wallet::new(wallet_config_path);
-        let mut account = wallet.load_account("0x0009b114f7f9b054b30f1cdc18080e115e14fd51".into());
-        let (user_op, op_hash) = wallet
-        .fill_tornado_withdraw_user_op(
-            "tornado-eth-0.1-12345-0x7afd6fe7a97dd8f87b895697222cdb584cc9fdb44e0435f05890b500a69e52dd1e119e86328c7244d104798a1aea6f980f59cdf98ea3f2efa43fc0dd84e7",
-             "0x0000000000000000000000000000000000000187".parse().unwrap(),
-              12345,
-               &account,
-                tornado_util::TORNADO_ADDRESS.parse().unwrap(),
-            )
-            .await;
-        let result = wallet.send_op(user_op, &mut account).await;
-        println!("{}", result);
-    }
+    // #[tokio::test]
+    // pub async fn test_query_gas() {
+    //     let wallet_config_path = PathBuf::from("wallet_config.toml");
+    //     let wallet = Erc4337Wallet::new(wallet_config_path);
+    //     let owner = Address::from_str("1F0BDb0533b9aB79c891E65aC3ad3df4cd164B50").unwrap();
+    //     let account = wallet.create_account(
+    //         owner,
+    //         Option::Some(
+    //             "0xe78A0F7E598Cc8b0Bb87894B0F60dD2a88d6a8Ab"
+    //                 .parse()
+    //                 .unwrap(),
+    //         ),
+    //     );
+    //     wallet
+    //         .fill_user_op(
+    //             &account,
+    //             "0x0000000000000000000000000000000000000001"
+    //                 .parse()
+    //                 .unwrap(),
+    //             U256::from_dec_str("10").unwrap(),
+    //             5777.into(),
+    //             None,
+    //         )
+    //         .await;
+    // }
 
     #[tokio::test]
     pub async fn test_nonce() {
@@ -701,16 +350,16 @@ mod tests {
 
     use crate::bls::BLSAccount;
     #[tokio::test]
-    pub async fn test_BLS_send_op() {
+    pub async fn test_bls_send_op() {
         let wallet_config_path = PathBuf::from("wallet_config.toml");
         let wallet = Erc4337Wallet::new(wallet_config_path);
         let path = &wallet.key_store_path;
-        let addr_str = "0x292d0be3b8b0a7f9b6c98ab73aef11198d976eda";
+        let addr_str = "0x3df21301e2b4d3da7ec3762f1cb6f8e8e3092230";
         let mut bls_account = BLSAccount::load_account(&path, addr_str);
         let (user_op, ophash) = wallet
-            .g_fill_op(
+            .fill_user_op(
                 &bls_account,
-                "0x0000000000000000000000000000000000000467"
+                "0x0000000000000000000000000000000000013579"
                     .parse()
                     .unwrap(),
                 U256::from_dec_str("111").unwrap(),
@@ -733,9 +382,9 @@ mod tests {
         let addr_str = "0x96b47a75bfa193f805baf9956ad46d9b038f1678";
         let mut account = SimpleAccount::load_account(&path, addr_str);
         let (user_op, ophash) = wallet
-            .g_fill_op(
+            .fill_user_op(
                 &account,
-                "0x0000000000000000000000000000000000000918"
+                "0x0000000000000000000000000000000000028825"
                     .parse()
                     .unwrap(),
                 U256::from_dec_str("131").unwrap(),
@@ -751,15 +400,16 @@ mod tests {
 
     #[tokio::test]
     //test sending tornado cash deposit user_op
+    //increase gas if failed
     //for some version of bundler, needs to disable gas query to endable tornado cash
     pub async fn test_g_tornado_deposit() {
         let wallet_config_path = PathBuf::from("wallet_config.toml");
         let wallet = Erc4337Wallet::new(wallet_config_path);
         let path = &wallet.key_store_path;
-        let addr_str = "0x96b47a75bfa193f805baf9956ad46d9b038f1678";
-        let mut account = SimpleAccount::load_account(&path, addr_str);
+        let addr_str = "0x3df21301e2b4d3da7ec3762f1cb6f8e8e3092230";
+        let mut account = BLSAccount::load_account(&path, addr_str);
         let (user_op, op_hash) = wallet
-            .g_fill_tornado_deposit_user_op(
+            .fill_tornado_deposit_user_op(
                 "0.1",
                 &account,
                 "123456789",
@@ -772,17 +422,18 @@ mod tests {
 
     #[tokio::test]
     //test sending tornado cash withdraw user_op
+    //increase gas if failed
     //for some version of bundler, needs to disable gas query to endable tornado cash
     pub async fn test_g_tornado_withdraw() {
         let wallet_config_path = PathBuf::from("wallet_config.toml");
         let wallet = Erc4337Wallet::new(wallet_config_path);
         let path = &wallet.key_store_path;
-        let addr_str = "0x96b47a75bfa193f805baf9956ad46d9b038f1678";
-        let mut account = SimpleAccount::load_account(&path, addr_str);
+        let addr_str = "0x3df21301e2b4d3da7ec3762f1cb6f8e8e3092230";
+        let mut account = BLSAccount::load_account(&path, addr_str);
         let (user_op, op_hash) = wallet
-        .g_fill_tornado_withdraw_user_op(
-            "tornado-eth-0.1-12345-0x0f976955390b0e31567e9f7c6ea8c740e896f1b43af3de2bcb77ab7bd6a295d98ce1cf6c9f590d7a30ea621806d65c4885dc243a088109bdb50b9f86c910",
-             "0x0000000000000000000000000000000000000187".parse().unwrap(),
+        .fill_tornado_withdraw_user_op(
+            "tornado-eth-0.1-12345-0xf15c235e0676176a7fbd70b2ec71feba66a031548a566bc03d63172e8cedb4db4d8c6280b4ac4716906007a7c6c8f4e0c251b5f7500264440caa536ca7fa",
+             "0x1f0bdb0533b9ab79c891e65ac3ad3df4cd164b50".parse().unwrap(),
                &account,
                "123456789",
                tornado_util::TORNADO_ADDRESS.parse().unwrap(),
