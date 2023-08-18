@@ -11,3 +11,5 @@ target/
 *.h
 cping
 keystore
+
+foundry-lib
