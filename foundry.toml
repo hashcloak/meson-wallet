@@ -3,7 +3,7 @@ src = 'contracts'
 out = 'out'
 script = 'contracts/script'
 test = 'contracts/test'
-libs = ['contracts/foundry-lib']
-remappings = ['forge-std/=contracts/foundry-lib/forge-std/src/','openzeppelin-contracts/=contracts/foundry-lib/openzeppelin-contracts/']
+libs = ['foundry-lib']
+remappings = ['forge-std/=foundry-lib/forge-std/src/','openzeppelin-contracts/=foundry-lib/openzeppelin-contracts/']
 
 # See more config options https://github.com/foundry-rs/foundry/tree/master/config
