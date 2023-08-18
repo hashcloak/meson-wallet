@@ -27,7 +27,6 @@ const DEFAULT_KDF_PARAMS_P: u32 = 1u32;
 //todo: condider using compressed g2 form
 type BLSPublicKey = [U256; 4];
 
-type Aes128Ctr = ctr::Ctr64LE<aes::Aes128>;
 type Aes256Ctr = ctr::Ctr64LE<aes::Aes256>;
 
 #[derive(Deserialize)]
@@ -305,12 +304,6 @@ mod tests {
     use crate::tornado_util;
 
     use super::*;
-    use ethers::prelude::*;
-    use ethers::utils::__serde_json::json;
-    use futures::executor::block_on;
-    use futures::FutureExt;
-    use std::sync::Arc;
-    const RPC_URL: &str = "https://eth.llamarpc.com";
 
     // #[tokio::test]
     // pub async fn test_query_gas() {

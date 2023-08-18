@@ -1,7 +1,6 @@
 use std::env;
 mod bls;
 mod cli;
-mod create_sender_util;
 mod erc4337_common;
 mod erc4337wallet;
 mod error;
