@@ -6,12 +6,7 @@
 # 	path = lib/openzeppelin-contracts
 # 	url = https://github.com/Openzeppelin/openzeppelin-contracts
 # 	branch = v4.8.1
-[submodule "foundry-lib/forge-std"]
-	path = foundry-lib/forge-std
-	url = https://github.com/foundry-rs/forge-std
-[submodule "foundry-lib/openzeppelin-contracts"]
-	path = foundry-lib/openzeppelin-contracts
-	url = https://github.com/OpenZeppelin/openzeppelin-contracts
+
 [submodule "contracts/foundry-lib/openzeppelin-contracts"]
 	path = contracts/foundry-lib/openzeppelin-contracts
 	url = https://github.com/OpenZeppelin/openzeppelin-contracts
