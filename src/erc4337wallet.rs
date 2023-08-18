@@ -33,13 +33,15 @@ type Aes256Ctr = ctr::Ctr64LE<aes::Aes256>;
 pub struct Erc4337Wallet {
     pub key_store_path: PathBuf,
     pub meson_setting_path: PathBuf,
-    pub Chain: HashMap<String, ChainInfo>,
+    pub supported_accounts_path: PathBuf,
+    pub entrypoint: String,
+    pub chain: HashMap<String, ChainInfo>,
 }
 
 #[derive(Deserialize)]
 pub struct ChainInfo {
-    Ticker: String,
-    Endpoint: String,
+    ticker: String,
+    endpoint: String,
 }
 
 const EXECUTE_SIGNATURE: &str = "b61d27f6";
@@ -65,7 +67,7 @@ impl Erc4337Wallet {
         let mut user_op = UserOperation::new();
         //only include initcode if not yet deployed
         user_op = if !account.deployed() {
-            let initcode = account.create_init_code();
+            let initcode = account.create_init_code(&self.supported_accounts_path);
             user_op.init_code(initcode)
         } else {
             user_op
@@ -108,7 +110,7 @@ impl Erc4337Wallet {
 
         //set signature to empty bytes for signing
         user_op = user_op.signature(Bytes::default());
-        let sig = account.sign(&user_op, password);
+        let sig = account.sign(&user_op, password, &self.key_store_path);
         let user_op = user_op.signature(sig);
         let user_op_hash = hex::encode(keccak256(AbiEncode::encode((
             user_op.hash(),
@@ -203,7 +205,7 @@ impl Erc4337Wallet {
             .unwrap();
 
         if !account.deployed() {
-            account.set_deployed(true);
+            account.set_deployed(true, &self.key_store_path);
         }
         result
     }
@@ -347,7 +349,7 @@ mod tests {
         let wallet_config_path = PathBuf::from("wallet_config.toml");
         let wallet = Erc4337Wallet::new(wallet_config_path);
         let path = &wallet.key_store_path;
-        let addr_str = "0x3df21301e2b4d3da7ec3762f1cb6f8e8e3092230";
+        let addr_str = "0x11a06b6ac30dc0fedfb7c7b8660f032c67c2a7f7";
         let mut bls_account = BLSAccount::load_account(&path, addr_str);
         let (user_op, ophash) = wallet
             .fill_user_op(
@@ -372,7 +374,7 @@ mod tests {
         let wallet_config_path = PathBuf::from("wallet_config.toml");
         let wallet = Erc4337Wallet::new(wallet_config_path);
         let path = &wallet.key_store_path;
-        let addr_str = "0x96b47a75bfa193f805baf9956ad46d9b038f1678";
+        let addr_str = "0xa9f91eba34bcedb773248c06f4ee99a5f69befd2";
         let mut account = SimpleAccount::load_account(&path, addr_str);
         let (user_op, ophash) = wallet
             .fill_user_op(
@@ -380,7 +382,7 @@ mod tests {
                 "0x0000000000000000000000000000000000028825"
                     .parse()
                     .unwrap(),
-                U256::from_dec_str("131").unwrap(),
+                U256::from_dec_str("1").unwrap(),
                 "123456789",
                 None,
             )
@@ -399,7 +401,7 @@ mod tests {
         let wallet_config_path = PathBuf::from("wallet_config.toml");
         let wallet = Erc4337Wallet::new(wallet_config_path);
         let path = &wallet.key_store_path;
-        let addr_str = "0x3df21301e2b4d3da7ec3762f1cb6f8e8e3092230";
+        let addr_str = "0x11a06b6ac30dc0fedfb7c7b8660f032c67c2a7f7";
         let mut account = BLSAccount::load_account(&path, addr_str);
         let (user_op, op_hash) = wallet
             .fill_tornado_deposit_user_op(
@@ -425,7 +427,7 @@ mod tests {
         let mut account = BLSAccount::load_account(&path, addr_str);
         let (user_op, op_hash) = wallet
         .fill_tornado_withdraw_user_op(
-            "tornado-eth-0.1-12345-0xf15c235e0676176a7fbd70b2ec71feba66a031548a566bc03d63172e8cedb4db4d8c6280b4ac4716906007a7c6c8f4e0c251b5f7500264440caa536ca7fa",
+            "tornado-eth-0.1-12345-0x989c9819812d7c4d54914bfe40760fe35cc173d3a628d215838ebc9938d72447809643ee7698bbd6408887000d26c10860fc3c42d8ee39e11d0385e01229",
              "0x1f0bdb0533b9ab79c891e65ac3ad3df4cd164b50".parse().unwrap(),
                &account,
                "123456789",

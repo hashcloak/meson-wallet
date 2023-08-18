@@ -3,6 +3,7 @@ use ethers::prelude::{Address, U256};
 use serde::ser::SerializeSeq;
 use serde::{Deserialize, Serialize};
 use std::fmt;
+use std::path::Path;
 #[derive(Serialize)]
 pub struct UserOperationRequest {
     pub jsonrpc: i8,
@@ -48,9 +49,14 @@ impl fmt::Display for ERC4337Error {
 }
 
 pub trait Account {
-    fn create_init_code(&self) -> Vec<u8>;
+    fn create_init_code<P: AsRef<Path>>(&self, supported_accounts_path: P) -> Vec<u8>;
 
-    fn sign(&self, user_op: &UserOperation, password: &str) -> Vec<u8>;
+    fn sign<P: AsRef<Path>>(
+        &self,
+        user_op: &UserOperation,
+        password: &str,
+        key_store_path: P,
+    ) -> Vec<u8>;
 
     fn address(&self) -> Address;
 
@@ -62,5 +68,5 @@ pub trait Account {
 
     fn deployed(&self) -> bool; //todo: does account need to hold deployed status?
 
-    fn set_deployed(&mut self, status: bool); //update and save deployed status
+    fn set_deployed<P: AsRef<Path>>(&mut self, status: bool, key_store_path: P); //update and save deployed status
 }
