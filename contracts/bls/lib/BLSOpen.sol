@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity >=0.6.12;
 
-import {BLS} from "./hubble-contracts/contracts/libs/BLS.sol";
+import {BLS} from "./BLS.sol";
 
 library BLSOpen {
     function verifySingle(
