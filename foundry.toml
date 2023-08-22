@@ -1,8 +1,8 @@
 [profile.default]
-src = 'contracts'
+src = 'src/contracts'
 out = 'out'
-script = 'contracts/script'
-test = 'contracts/test'
+script = 'src/contracts/script'
+test = 'src/contracts/test'
 libs = ['foundry-lib']
 remappings = ['forge-std/=foundry-lib/forge-std/src/','openzeppelin-contracts/=foundry-lib/openzeppelin-contracts/']
 
