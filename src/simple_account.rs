@@ -90,6 +90,22 @@ impl SimpleAccount {
         account
     }
 
+    pub fn account_list<P: AsRef<Path>>(key_store_path: P) -> Vec<String> {
+        let dir = key_store_path.as_ref().join("simple_account");
+        let mut files = Vec::<String>::new();
+        match dir.read_dir() {
+            Ok(entry) => {
+                files = entry
+                    .into_iter()
+                    .map(|f| f.unwrap().file_name().to_str().unwrap().to_owned())
+                    .collect::<Vec<String>>()
+            }
+
+            Err(_) => return vec![],
+        }
+        return files;
+    }
+
     pub fn verify(&self, user_op: &UserOperation, signature: &[u8]) -> bool {
         let sig = Signature::try_from(signature).unwrap();
         let op_hash = keccak256(AbiEncode::encode((

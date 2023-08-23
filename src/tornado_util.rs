@@ -3,14 +3,14 @@ use ark_circom::{ethereum, CircomBuilder, CircomConfig};
 use ark_groth16::{Groth16, ProvingKey};
 use ark_serialize::CanonicalDeserialize;
 use ark_snark::SNARK;
-use babyjubjub_rs::{decompress_point, Fr, Point};
+use babyjubjub_rs::{decompress_point, Fr};
 use ethers::abi::{AbiEncode, Address};
 use ethers::prelude::{Bytes, Filter, Middleware, Provider, U256};
 use ethers::{utils, utils::hex::FromHex};
-use ff_ce::{from_hex, Field, PrimeField};
+use ff_ce::from_hex;
 use mimc_sponge_rs::Fr as mimc_fr;
 use num_bigint::{BigInt, Sign};
-use rand::{thread_rng, Rng, SeedableRng};
+use rand::{thread_rng, Rng};
 use std::str::FromStr;
 use std::sync::Arc;
 type GrothBn = Groth16<Bn254>;
@@ -33,7 +33,7 @@ pub struct Deposit {
 const DEPOSIT_SIGNATURE: &str = "0xb214faa5";
 const WITHDRAW_SIGNATURE: &str = "0x21a0adb6";
 const log_rpc_url: &str = "http://localhost:8545"; //For query logs, since currently Meson doesn't support log querying
-pub const TORNADO_ADDRESS: &str = "0x88bf8F944127B037585Bcb82c674b5Cefdc56Ab9";
+pub const TORNADO_ADDRESS: &str = "0x88bf8F944127B037585Bcb82c674b5Cefdc56Ab9"; //todo: move tornado_addres to config
 const MERKLE_LEVEL: usize = 20;
 impl Deposit {
     pub fn new() -> Self {
@@ -70,7 +70,12 @@ impl Deposit {
         }
     }
 
-    pub fn gen_deposit_tx(&self, currency: Option<&str>, amount: &str, net_id: u64) -> Vec<u8> {
+    pub fn gen_deposit_tx(
+        &self,
+        currency: Option<&str>,
+        amount: &str,
+        net_id: u64,
+    ) -> (Vec<u8>, String) {
         let currency = currency.unwrap_or("eth".into());
         let preimage_hex = utils::hex::encode(&self.preimage);
         let note_string = format!("tornado-{currency}-{amount}-{net_id}-0x{preimage_hex}");
@@ -78,8 +83,8 @@ impl Deposit {
         let deposit_sig = Bytes::from_str(DEPOSIT_SIGNATURE).unwrap().to_vec();
         let commitment_vec = Bytes::from_str(&self.commitment_hex).unwrap().to_vec();
         let tx_vec = [deposit_sig, commitment_vec].concat();
-        println!("{}", note_string);
-        tx_vec
+        //println!("{}", note_string);
+        (tx_vec, note_string)
     }
 
     pub async fn parse_and_withdraw(
@@ -90,7 +95,7 @@ impl Deposit {
         refund: Option<U256>,
     ) -> Vec<u8> {
         let deposit = Self::parse_note(note);
-        println!("comm:{}", deposit.commitment_hex);
+        //println!("comm:{}", deposit.commitment_hex);
         deposit
             .gen_withdraw_tx(recipient, relayer, fee, refund)
             .await
@@ -168,7 +173,7 @@ pub async fn generate_merkle_proof(deposit: &Deposit) -> (Vec<mimc_fr>, Vec<u128
         .event("Deposit(bytes32,uint32,uint256)")
         .from_block(0);
     let mut logs = client.get_logs(&filter).await.unwrap();
-    println!("len: {}", logs.len());
+    //println!("len: {}", logs.len());
     logs.sort_by(|a, b| {
         U256::from_big_endian(&a.data[28..32])
             .partial_cmp(&U256::from_big_endian(&b.data[28..32]))
@@ -178,11 +183,11 @@ pub async fn generate_merkle_proof(deposit: &Deposit) -> (Vec<mimc_fr>, Vec<u128
         .iter()
         .map(|log| from_hex::<mimc_fr>(&utils::hex::encode(log.topics[1])).unwrap())
         .collect();
-    println!("{:?}", leaves);
+    //println!("{:?}", leaves);
     let mut index = 0u128;
     for i in 0..leaves.len() {
         if format!("0x{}", ff_ce::to_hex(&leaves[i])) == deposit.commitment_hex {
-            println!("found: 0x{}", ff_ce::to_hex(&leaves[i]));
+            //println!("found: 0x{}", ff_ce::to_hex(&leaves[i]));
             index = i.try_into().unwrap();
             break;
         }
@@ -190,7 +195,7 @@ pub async fn generate_merkle_proof(deposit: &Deposit) -> (Vec<mimc_fr>, Vec<u128
             panic!("No commitment found");
         }
     }
-    println!("{}", index);
+    //println!("{}", index);
     let tree = sparse_merkle_tree::MerkleTree::new(
         MERKLE_LEVEL,
         None,
@@ -299,14 +304,8 @@ fn to_be_bytes(u64_4_in: &[u64; 4]) -> Vec<u8> {
 
 mod tests {
     use super::*;
-    use ark_bn254::G1Affine;
-    use ethers::{
-        core::types::{Address, Filter, H160, H256, U256},
-        providers::{Http, Middleware, Provider},
-    };
-    use num_bigint::BigUint;
+    use ethers::{core::types::Address, providers::Provider};
     use serde_json::json;
-    use std::sync::Arc;
 
     #[test]
     pub fn test_deposit() {
@@ -322,7 +321,7 @@ mod tests {
         //let rpc_url = "https://node.stackup.sh/v1/rpc/9c21ff1cba3a5407d43324bfc6718044de9203b2b6fb09aac8b52a7d7496bdf5";
         let rpc_url = "http://localhost:8545";
         let deposit = Deposit::new();
-        let tx = deposit.gen_deposit_tx(None, "0.1".into(), 1337);
+        let (tx, _) = deposit.gen_deposit_tx(None, "0.1".into(), 1337);
         let data = "0x".to_owned() + &utils::hex::encode(tx);
         println!("{}", data);
         let provider = Provider::try_from(rpc_url).unwrap();

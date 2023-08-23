@@ -41,13 +41,13 @@ const DEFAULT_KDF_PARAMS_P: u32 = 1u32;
 pub struct MesonWallet {
     key_store_path: PathBuf,
     meson_setting_path: PathBuf,
-    Chain: HashMap<String, ChainInfo>,
+    chain: HashMap<String, chainInfo>,
 }
 
 #[derive(serde::Deserialize)]
-struct ChainInfo {
-    Ticker: String,
-    Endpoint: String,
+struct chainInfo {
+    ticker: String,
+    endpoint: String,
 }
 
 //struct for encrypting mnemonic
@@ -349,8 +349,8 @@ impl MesonWallet {
     }
 
     pub fn ticker(&self, chain_id: U64) -> Result<&str, MesonError> {
-        match self.Chain.get(&chain_id.to_string()) {
-            Some(info) => return Ok(&info.Ticker),
+        match self.chain.get(&chain_id.to_string()) {
+            Some(info) => return Ok(&info.ticker),
             None => return Err(MesonError::MesonError("Unsupport chain id".into())),
         }
     }

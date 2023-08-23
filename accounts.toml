@@ -1,3 +1,5 @@
+supported_list = ["Simple Account","BLS"]
+
 #Account factory/implementation address for bls account on different chain
 [bls]
   [bls.5]

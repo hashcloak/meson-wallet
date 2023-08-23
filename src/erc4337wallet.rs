@@ -15,6 +15,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
+use toml::Value;
 
 const DEFAULT_KEY_SIZE: usize = 48usize;
 const DEFAULT_IV_SIZE: usize = 16usize;
@@ -100,7 +101,7 @@ impl Erc4337Wallet {
         let gas_info = self.query_gas_info(account, &user_op).await;
         println!("{gas_info:?}");
 
-        // //shoud set the gas price from gas_info (current stackup version doesn't work)
+        //shoud set the gas price from gas_info (current stackup version doesn't work)
         user_op = user_op
             .call_gas_imit(1500000)
             .verification_gas_limit(1500000)
@@ -128,7 +129,10 @@ impl Erc4337Wallet {
         tornado_addr: Address,
     ) -> (UserOperation, String) {
         let tor_deposit = Deposit::new();
-        let tx = tor_deposit.gen_deposit_tx(None, eth_amount, account.chain_id().as_u64());
+        let (tx, note_string) =
+            tor_deposit.gen_deposit_tx(None, eth_amount, account.chain_id().as_u64());
+        println!("Note string: {}", note_string);
+        self.save_tornado_notes(&note_string, account, password);
         let (user_op, hash_str) = self
             .fill_user_op(
                 account,
@@ -156,6 +160,71 @@ impl Erc4337Wallet {
             .await;
 
         (user_op, hash_str)
+    }
+
+    pub fn save_tornado_notes<P: Account>(&self, tor_note: &str, account: &P, password: &str) {
+        let addr = "0x".to_owned() + &hex::encode(account.address());
+        let dir = self
+            .key_store_path
+            .join("tornado_note")
+            .join(addr)
+            .join(account.chain_id().to_string());
+        fs::create_dir_all(&dir).unwrap();
+
+        let note_digest = std::str::from_utf8(&tor_note.as_bytes()[0..30]).unwrap();
+        let dir = dir.join(note_digest);
+        let mut rng = rand::thread_rng();
+        let tor_note: Vec<u8> = tor_note.bytes().collect();
+        Self::encrypt_key(dir, &mut rng, tor_note, password).unwrap();
+    }
+
+    pub fn tornado_note_lists<P: Account>(&self, account: &P) -> Vec<String> {
+        let addr = "0x".to_owned() + &hex::encode(account.address());
+        let dir = self
+            .key_store_path
+            .join("tornado_note")
+            .join(addr)
+            .join(account.chain_id().to_string());
+        let mut files = Vec::<String>::new();
+        match dir.read_dir() {
+            Ok(entry) => {
+                files = entry
+                    .into_iter()
+                    .map(|f| f.unwrap().file_name().to_str().unwrap().to_owned())
+                    .collect::<Vec<String>>()
+            }
+
+            Err(_) => return vec![],
+        }
+        return files;
+    }
+
+    pub fn load_tornado_note<P: Account>(
+        &self,
+        account: &P,
+        note_digest: &str,
+        password: &str,
+    ) -> String {
+        let addr = "0x".to_owned() + &hex::encode(account.address());
+        let dir = self
+            .key_store_path
+            .join("tornado_note")
+            .join(addr)
+            .join(account.chain_id().to_string())
+            .join(note_digest);
+        let d = Self::decrypt_key(dir, password).unwrap();
+        String::from_utf8(d).unwrap()
+    }
+
+    pub fn delete_tornado_note<P: Account>(&self, account: &P, note_digest: &str) {
+        let addr = "0x".to_owned() + &hex::encode(account.address());
+        let path = self
+            .key_store_path
+            .join("tornado_note")
+            .join(addr)
+            .join(account.chain_id().to_string())
+            .join(note_digest);
+        fs::remove_file(path).unwrap();
     }
 
     pub async fn query_gas_info<P: Account>(
@@ -208,6 +277,17 @@ impl Erc4337Wallet {
             account.set_deployed(true, &self.key_store_path);
         }
         result
+    }
+
+    pub fn supproted_acount_types(&self) -> Vec<String> {
+        let toml_str = fs::read_to_string(&self.supported_accounts_path).unwrap();
+        let value = &toml_str.parse::<Value>().unwrap();
+        let supported = value["supported_list"].as_array().unwrap();
+        let suppoeted: Vec<String> = supported
+            .into_iter()
+            .map(|v| v.as_str().unwrap().to_owned())
+            .collect();
+        suppoeted
     }
 
     pub fn encrypt_key<P, R, S, T>(dir: P, rng: &mut R, mut sk: S, password: T) -> Result<(), ()>
