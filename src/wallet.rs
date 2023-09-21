@@ -1,6 +1,6 @@
-#![allow(non_upper_case_globals)]
 #![allow(non_camel_case_types)]
 #![allow(non_snake_case)]
+use crate::error::{MesonError, MesonWalletError, MnemonicError};
 use crate::{cli, meson_common};
 use aes::cipher::{KeyIvInit, StreamCipher};
 use base64ct::{Base64, Encoding};
@@ -21,15 +21,11 @@ use std::fmt;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
-// pub mod cli;
-// pub mod error;
-// mod meson_common;
-use crate::error::{MesonError, MesonWalletError, MnemonicError};
 include!("../bindings.rs");
 
 type Aes128Ctr = ctr::Ctr64LE<aes::Aes128>;
 
-const meson_service: &str = "meson";
+const MESON_SERVICE: &str = "meson";
 const DEFAULT_KEY_SIZE: usize = 32usize;
 const DEFAULT_IV_SIZE: usize = 16usize;
 const DEFAULT_KDF_PARAMS_DKLEN: u8 = 32u8;
@@ -37,6 +33,7 @@ const DEFAULT_KDF_PARAMS_LOG_N: u8 = 13u8;
 const DEFAULT_KDF_PARAMS_R: u32 = 8u32;
 const DEFAULT_KDF_PARAMS_P: u32 = 1u32;
 
+// meson eoa wallet
 #[derive(serde::Deserialize)]
 pub struct MesonWallet {
     key_store_path: PathBuf,
@@ -47,7 +44,7 @@ pub struct MesonWallet {
 #[derive(serde::Deserialize)]
 struct chainInfo {
     ticker: String,
-    endpoint: String,
+    //endpoint: String,
 }
 
 //struct for encrypting mnemonic
@@ -358,7 +355,7 @@ impl MesonWallet {
     pub fn delete_imported_account(&self) -> Result<(), Box<dyn Error>> {
         let import_dir = self.key_store_path.join("imported_keystore");
         let mut accounts = Vec::new();
-        let mut files = Vec::new();
+        let files;
         match import_dir.read_dir() {
             Ok(entry) => files = entry.collect::<Vec<_>>(),
             Err(_) => return Err("Empty account list".into()),
@@ -398,13 +395,13 @@ pub fn meson_register(path: &str) {
     unsafe {
         Register(configFile.into_raw());
         NewClient(
-            CString::new(meson_service)
+            CString::new(MESON_SERVICE)
                 .expect("CString::new failed")
                 .into_raw(),
         );
         NewSession();
         GetService(
-            CString::new(meson_service)
+            CString::new(MESON_SERVICE)
                 .expect("CString::new failed")
                 .into_raw(),
         );
@@ -462,7 +459,7 @@ pub fn meson_eth_query(
     //todo: check if really needs to use base64 query
     let req = meson_common::MesonCurrencyRequest {
         Version: 0,
-        Command: meson_common::EthQuery,
+        Command: meson_common::ETH_QUERY,
         Ticker: ticker.to_owned(),
         Payload: query,
     };
@@ -486,7 +483,7 @@ pub fn process_transaction(tx_bytes: Bytes, ticker: &str) -> Result<String, Meso
     let meson_tx = base64ct::Base64::encode_string(&meson_tx[..]);
     let req = meson_common::MesonCurrencyRequest {
         Version: 0,
-        Command: meson_common::PostTransaction,
+        Command: meson_common::POST_TRANSACTION,
         Ticker: ticker.to_owned(),
         Payload: meson_tx,
     };
@@ -601,7 +598,7 @@ where
     Ok(mnemonic)
 }
 
-pub fn ping() {
+pub fn _ping() {
     let configFile = CString::new(
         "/Users/liaoyuchen/Developer/hashcloak/meson/meson-wallet/meson-wallet/client.example.toml",
     )
@@ -646,7 +643,7 @@ pub fn ping() {
         // let str_slice = c_str.to_str().unwrap();
     }
 }
-pub fn ping_unblock() {
+pub fn _ping_unblock() {
     let configFile = CString::new(
         "/Users/liaoyuchen/Developer/hashcloak/meson/meson-wallet/meson-wallet/client.example.toml",
     )
@@ -741,7 +738,7 @@ mod tests {
             "2cd0fc69151afffe19e66db7e31ec34f1fbf10552983711faccba030025fc706",
         )
         .unwrap();
-        let id = eth_keystore::encrypt_key(
+        let _id = eth_keystore::encrypt_key(
             tmp_dir.path(),
             &mut rand::thread_rng(),
             sk,

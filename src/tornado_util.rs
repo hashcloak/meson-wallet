@@ -19,7 +19,8 @@ use std::fs;
 pub mod parse_key;
 pub mod pedersen_hash;
 pub mod sparse_merkle_tree;
-// abigen!(Tornado, "src/ETHTornado.json");
+
+// tornado cash deposit
 #[derive(Debug)]
 pub struct Deposit {
     pub nullifier: BigInt,
@@ -30,12 +31,14 @@ pub struct Deposit {
     pub nullifier_hash: Fr,
     pub nullifier_hex: String,
 }
-const DEPOSIT_SIGNATURE: &str = "0xb214faa5";
-const WITHDRAW_SIGNATURE: &str = "0x21a0adb6";
-const log_rpc_url: &str = "http://localhost:8545"; //For query logs, since currently Meson doesn't support log querying
+const DEPOSIT_SIGNATURE: &str = "0xb214faa5"; // smart contract signature for "deposit(bytes32)"
+const WITHDRAW_SIGNATURE: &str = "0x21a0adb6"; // smart contract signature for "withdraw(bytes,bytes32,bytes32,address,address,uint256,uint256)"
+const LOG_RPC_URL: &str = "http://localhost:8545"; // for query logs, since currently Meson doesn't support log querying
 pub const TORNADO_ADDRESS: &str = "0x88bf8F944127B037585Bcb82c674b5Cefdc56Ab9"; //todo: move tornado_addres to config
-const MERKLE_LEVEL: usize = 20;
+const MERKLE_LEVEL: usize = 20; // merkle tree level of tornado cash contract
+
 impl Deposit {
+    // create new tornado cash deposit
     pub fn new() -> Self {
         let mut r = thread_rng();
         // let mut r = StdRng::seed_from_u64(11);
@@ -70,6 +73,7 @@ impl Deposit {
         }
     }
 
+    // create tornado cash deposit transaction data
     pub fn gen_deposit_tx(
         &self,
         currency: Option<&str>,
@@ -79,7 +83,7 @@ impl Deposit {
         let currency = currency.unwrap_or("eth".into());
         let preimage_hex = utils::hex::encode(&self.preimage);
         let note_string = format!("tornado-{currency}-{amount}-{net_id}-0x{preimage_hex}");
-        let value = utils::parse_ether(amount).unwrap();
+        //let value = utils::parse_ether(amount).unwrap();
         let deposit_sig = Bytes::from_str(DEPOSIT_SIGNATURE).unwrap().to_vec();
         let commitment_vec = Bytes::from_str(&self.commitment_hex).unwrap().to_vec();
         let tx_vec = [deposit_sig, commitment_vec].concat();
@@ -87,6 +91,7 @@ impl Deposit {
         (tx_vec, note_string)
     }
 
+    // parse a tornado cash node and create a withdraw transaction data
     pub async fn parse_and_withdraw(
         note: &str,
         recipient: Address,
@@ -101,6 +106,7 @@ impl Deposit {
             .await
     }
 
+    // create tornado cash withdraw transaction data
     pub async fn gen_withdraw_tx(
         &self,
         recipient: Address,
@@ -129,12 +135,13 @@ impl Deposit {
         tx_vec
     }
 
+    // parse a tornado-note to a deposit
     pub fn parse_note(note: &str) -> Deposit {
         let mut note_iter = note.split("-");
         note_iter.next();
-        let currency = note_iter.next().unwrap();
-        let amount = note_iter.next().unwrap();
-        let net_id = note_iter.next().unwrap();
+        let _currency = note_iter.next().unwrap();
+        let _amount = note_iter.next().unwrap();
+        let _net_id = note_iter.next().unwrap();
         let preimage_hex = note_iter.next().unwrap().strip_prefix("0x").unwrap();
         let preimage = <[u8; 62]>::from_hex(preimage_hex).unwrap().to_vec();
         let nullifier_random_bytes = &preimage[..31];
@@ -163,10 +170,11 @@ impl Deposit {
     }
 }
 
+// generate merkle proof for a deposit
 pub async fn generate_merkle_proof(deposit: &Deposit) -> (Vec<mimc_fr>, Vec<u128>, mimc_fr) {
     //todo: fetch addr from env of cfg
     let tornado_addr: Address = TORNADO_ADDRESS.parse().unwrap();
-    let provider = Provider::try_from(log_rpc_url).unwrap();
+    let provider = Provider::try_from(LOG_RPC_URL).unwrap();
     let client = Arc::new(provider);
     let filter = Filter::new()
         .address(tornado_addr)
@@ -203,10 +211,11 @@ pub async fn generate_merkle_proof(deposit: &Deposit) -> (Vec<mimc_fr>, Vec<u128
         Some(leaves),
     );
     let root = tree.root();
-    let (pathElements, pathIndices) = tree.path(index);
-    return (pathElements, pathIndices, root);
+    let (path_elements, path_indices) = tree.path(index);
+    return (path_elements, path_indices, root);
 }
 
+// generate zk proof for a deposit
 pub async fn generate_proof(
     deposit: &Deposit,
     recipient: Address,
@@ -257,9 +266,9 @@ pub async fn generate_proof(
     let params = ProvingKey::<Bn254>::deserialize_compressed_unchecked(&*compressed_bytes).unwrap();
 
     let circom = builder.build().unwrap();
-    let inputs = circom.get_public_inputs().unwrap();
+    let _inputs = circom.get_public_inputs().unwrap();
     let proof = GrothBn::prove(&params, circom, &mut rng).unwrap();
-    let pvk = GrothBn::process_vk(&params.vk).unwrap();
+    let _pvk = GrothBn::process_vk(&params.vk).unwrap();
     // let verified = GrothBn::verify_with_processed_vk(&pvk, &inputs, &proof).unwrap();
     // println!("result:{}", verified);
 
@@ -287,18 +296,18 @@ pub async fn generate_proof(
     (proof_bytes, root_u256)
 }
 
-fn to_be_bytes(u64_4_in: &[u64; 4]) -> Vec<u8> {
-    let mut result: [u8; 32] = [0; 32];
-    let mut index = 32;
-    for i in u64_4_in {
-        let s = i.to_le_bytes();
-        for j in s {
-            index -= 1;
-            result[index] = j;
-        }
-    }
-    result.to_vec()
-}
+// fn to_be_bytes(u64_4_in: &[u64; 4]) -> Vec<u8> {
+//     let mut result: [u8; 32] = [0; 32];
+//     let mut index = 32;
+//     for i in u64_4_in {
+//         let s = i.to_le_bytes();
+//         for j in s {
+//             index -= 1;
+//             result[index] = j;
+//         }
+//     }
+//     result.to_vec()
+// }
 
 #[cfg(test)]
 

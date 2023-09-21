@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use ff_ce::{Field, PrimeField};
 use mimc_sponge_rs::{Fr, MimcSponge};
 const DEFAULT_ZERO: &str =
@@ -84,21 +85,21 @@ impl<T: PrimeField> MerkleTree<T> {
         if index >= self.layers[0].len().try_into().unwrap() {
             panic!("Index out of bound");
         }
-        let mut pathElements = Vec::<T>::new();
-        let mut pathIndices = Vec::<u128>::new();
+        let mut path_elements = Vec::<T>::new();
+        let mut path_indices = Vec::<u128>::new();
         for level in 0..self.levels {
-            pathIndices.push(index % 2);
+            path_indices.push(index % 2);
             let element = if index ^ 1 < self.layers[level].len().try_into().unwrap() {
                 self.layers[level][usize::try_from(index ^ 1).unwrap()]
             } else {
                 self.zeros[level]
             };
 
-            pathElements.push(element);
+            path_elements.push(element);
 
             index >>= 1;
         }
-        (pathElements, pathIndices)
+        (path_elements, path_indices)
     }
 
     pub fn update(&mut self, mut index: usize, element: T) {
@@ -130,7 +131,7 @@ impl<T: PrimeField> MerkleTree<T> {
         self.update(self.layers[0].len() - 1, element)
     }
 
-    pub fn bulkInsert(&mut self, elements: Vec<T>) {
+    pub fn bulk_insert(&mut self, elements: Vec<T>) {
         if u128::try_from(self.layers[0].len() + elements.len()).unwrap() >= self.capacity {
             panic!("Tree is full");
         }
@@ -212,7 +213,7 @@ mod tests {
             Fr::from_str("10").unwrap(),
         ];
         let mut mt = MerkleTree::new(33, None, default_hash, Some(elements));
-        mt.bulkInsert(vec![
+        mt.bulk_insert(vec![
             Fr::from_str("45").unwrap(),
             Fr::from_str("33").unwrap(),
             Fr::from_str("107").unwrap(),

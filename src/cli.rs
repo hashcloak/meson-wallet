@@ -6,6 +6,7 @@ use ethers::types::transaction::eip2718::TypedTransaction;
 use ethers::utils::hex;
 use std::io;
 
+// select between eoa wallet/ account abstraction wallet
 pub fn select_wallet_type() -> Result<u8, io::Error> {
     let selections = vec!["EOA Wallet", "Account Abstraction Wallet", "Quit"];
     let selection = dialoguer::Select::new()
@@ -20,6 +21,7 @@ pub fn select_wallet_type() -> Result<u8, io::Error> {
     }
 }
 
+// select account abstraction wallet type
 pub fn select_aa_wallet_type(selections: &[String]) -> Result<u8, io::Error> {
     let selection = dialoguer::Select::new()
         .items(&selections)
@@ -32,6 +34,7 @@ pub fn select_aa_wallet_type(selections: &[String]) -> Result<u8, io::Error> {
     }
 }
 
+// select account abstraction wallet function
 pub fn select_aa_func() -> Result<u8, io::Error> {
     let selections = vec![
         "Create account",
@@ -52,6 +55,7 @@ pub fn select_aa_func() -> Result<u8, io::Error> {
     }
 }
 
+// select eoa wallet function
 pub fn select_eoa_func() -> Result<u8, io::Error> {
     let selections = vec![
         "Import mnemonic",
@@ -74,6 +78,7 @@ pub fn select_eoa_func() -> Result<u8, io::Error> {
     }
 }
 
+// prompt for password with repeated password confirmation
 pub fn prompt_password_confirm() -> Result<String, io::Error> {
     let password = dialoguer::Password::default()
         .with_prompt("Enter Password")
@@ -82,6 +87,7 @@ pub fn prompt_password_confirm() -> Result<String, io::Error> {
     Ok(password)
 }
 
+// prompt for password
 pub fn prompt_password() -> Result<String, io::Error> {
     let password = dialoguer::Password::default()
         .with_prompt("Enter Password")
@@ -89,6 +95,7 @@ pub fn prompt_password() -> Result<String, io::Error> {
     Ok(password)
 }
 
+// select a eoa account wallet
 pub fn select_account(accounts: &[Account]) -> Result<&Account, io::Error> {
     let selection = dialoguer::Select::new()
         .with_prompt("Select an account")
@@ -102,6 +109,7 @@ pub fn select_account(accounts: &[Account]) -> Result<&Account, io::Error> {
     }
 }
 
+// select an account abstraction wallet
 pub fn select_aa_account(accounts: &[String]) -> Result<&str, io::Error> {
     let selection = dialoguer::Select::new()
         .with_prompt("Select an account")
@@ -115,6 +123,7 @@ pub fn select_aa_account(accounts: &[String]) -> Result<&str, io::Error> {
     }
 }
 
+// select a tornato cash note
 pub fn select_tor_note(notes: &[String]) -> Result<&str, io::Error> {
     let selection = dialoguer::Select::new()
         .with_prompt("Select a note")
@@ -128,6 +137,7 @@ pub fn select_tor_note(notes: &[String]) -> Result<&str, io::Error> {
     }
 }
 
+// prompt for eoa transaction confirmation
 pub fn confirm_tx(tx: &TypedTransaction) -> Result<(), io::Error> {
     let from = tx
         .from()
@@ -187,6 +197,7 @@ pub fn confirm_tx(tx: &TypedTransaction) -> Result<(), io::Error> {
     }
 }
 
+// prompt for erc4337 user operation confirmation
 pub fn confirm_user_op(
     user_op: &UserOperation,
     to: &str,

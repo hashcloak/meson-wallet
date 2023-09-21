@@ -6,7 +6,7 @@ use ethers::core::types::{Address, Bytes, U256};
 use ethers::utils::{get_create2_address, hex, keccak256};
 use rand::random;
 use serde::{Deserialize, Serialize};
-use sig::{PrivateKey, PublicKey, SolPublicKey};
+use sig::{BLSSolPublicKey, PrivateKey};
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -16,14 +16,16 @@ pub mod hash_to_point;
 pub mod multi_sig;
 pub mod sig;
 
+// smart contract function signature
 const BLS_CREATE_ACCOUNT_SIGNATURE: &str = "0x19c2a1b2";
 const BLS_WALLET_LOGIC_INITIALIZE_SIGNATURE: &str = "0xee472f36";
 
+// BLS smart contract account, implements account trait
 #[derive(Deserialize, Serialize)]
 pub struct BLSAccount {
     address: Address,
-    aggregator: Address,
-    public_key: SolPublicKey,
+    aggregator: Address, // supported erc4337 aggregator contract, 0x00 for not using an aggregator
+    public_key: BLSSolPublicKey, // public key stored on chain
     entry_point: Address,
     salt: U256,
     chain_id: U256,
@@ -31,6 +33,7 @@ pub struct BLSAccount {
 }
 
 impl BLSAccount {
+    // create a new bls account
     pub fn new<P: AsRef<Path>>(
         key_store_path: P,
         supported_accounts_path: P,
@@ -82,6 +85,7 @@ impl BLSAccount {
         account
     }
 
+    // load a stored bls account
     pub fn load_account<P: AsRef<Path>>(key_store_path: P, address: &str) -> Self {
         let dir = key_store_path
             .as_ref()
@@ -93,9 +97,10 @@ impl BLSAccount {
         account
     }
 
+    // return a list of stored bls accounts
     pub fn account_list<P: AsRef<Path>>(key_store_path: P) -> Vec<String> {
         let dir = key_store_path.as_ref().join("bls");
-        let mut files = Vec::<String>::new();
+        let files;
         match dir.read_dir() {
             Ok(entry) => {
                 files = entry
@@ -109,30 +114,9 @@ impl BLSAccount {
         return files;
     }
 
-    pub fn verify(&self, user_op: &UserOperation, signature: &[u8]) -> bool {
-        let pk = self.public_key;
-        let pk = PublicKey::from_solidity_pk(pk);
-        let user_op_hash;
-        if Address::is_zero(&self.aggregator) {
-            user_op_hash = keccak256(AbiEncode::encode((
-                user_op.hash(),
-                self.entry_point,
-                self.chain_id,
-            )));
-        } else {
-            //todo: user_op_hash should follow ERC standard, consider update it in contract
-            user_op_hash = keccak256(AbiEncode::encode((
-                user_op.hash(),
-                self.entry_point,
-                self.aggregator,
-                self.chain_id,
-            )));
-        }
-        sig::verify(&pk, &user_op_hash, signature)
-    }
-
+    // generate account address using create2
     pub fn bls_create2addr<P: AsRef<Path>>(
-        bls_pk: SolPublicKey,
+        bls_pk: BLSSolPublicKey,
         salt: U256,
         supported_accounts_path: P,
         chain_id: &str,
@@ -161,6 +145,7 @@ impl BLSAccount {
         addr
     }
 
+    // get the path for storing encrypted key
     fn get_key_path<P: AsRef<Path>>(&self, key_store_path: P) -> PathBuf {
         let addr_str = "0x".to_owned() + &hex::encode(self.address);
         key_store_path
@@ -170,6 +155,7 @@ impl BLSAccount {
             .join("key")
     }
 
+    // get the path for storing account info
     fn get_account_path<P: AsRef<Path>>(&self, key_store_path: P) -> PathBuf {
         let addr_str = "0x".to_owned() + &hex::encode(self.address);
         key_store_path
@@ -179,7 +165,7 @@ impl BLSAccount {
             .join("account")
     }
 
-    //read account factory address from config file
+    // read account factory address from config file
     fn account_factory_address<P: AsRef<Path>>(
         chain_id: &str,
         supported_accounts_path: P,
@@ -192,7 +178,7 @@ impl BLSAccount {
         a.to_string()
     }
 
-    //read account implementation address from config file
+    // read account implementation address from config file
     fn account_impl_address<P: AsRef<Path>>(chain_id: &str, supported_accounts_path: P) -> String {
         let toml_str = fs::read_to_string(supported_accounts_path).unwrap();
         let value = &toml_str.parse::<Value>().unwrap();
@@ -203,6 +189,7 @@ impl BLSAccount {
     }
 }
 
+// implement account trait for bls account
 impl Account for BLSAccount {
     fn create_init_code<P: AsRef<Path>>(&self, supported_accounts_path: P) -> Vec<u8> {
         let mut signature = Bytes::from_str(BLS_CREATE_ACCOUNT_SIGNATURE)
@@ -279,6 +266,32 @@ impl Account for BLSAccount {
 #[cfg(test)]
 mod test {
     use super::*;
+    use sig::PublicKey;
+
+    impl BLSAccount {
+        // verify the signature in an user_op
+        pub fn verify(&self, user_op: &UserOperation, signature: &[u8]) -> bool {
+            let pk = self.public_key;
+            let pk = PublicKey::from_solidity_pk(pk);
+            let user_op_hash;
+            if Address::is_zero(&self.aggregator) {
+                user_op_hash = keccak256(AbiEncode::encode((
+                    user_op.hash(),
+                    self.entry_point,
+                    self.chain_id,
+                )));
+            } else {
+                //todo: user_op_hash should follow ERC standard, consider update it in contract
+                user_op_hash = keccak256(AbiEncode::encode((
+                    user_op.hash(),
+                    self.entry_point,
+                    self.aggregator,
+                    self.chain_id,
+                )));
+            }
+            sig::verify(&pk, &user_op_hash, signature)
+        }
+    }
 
     #[test]
     pub fn test_store_sign_bls() {

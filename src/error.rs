@@ -1,5 +1,7 @@
 use thiserror::Error;
 
+//todo: clean up error type after DirectPost update
+
 #[derive(Error, Debug)]
 pub enum MnemonicError {
     #[error("Mac Mismatch")]

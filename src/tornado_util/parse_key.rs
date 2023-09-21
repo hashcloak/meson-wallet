@@ -1,12 +1,16 @@
-use ark_bn254::{Bn254, Fq, Fq2, Fr, G1Affine, G2Affine};
-use ark_groth16::{Groth16, ProvingKey, VerifyingKey};
+#![allow(dead_code)]
+use ark_bn254::{Bn254, Fq, Fq2, G1Affine, G2Affine};
+use ark_groth16::{ProvingKey, VerifyingKey};
 use num_bigint::BigUint;
 use serde_json::Value;
 use std::fs::File;
 use std::io::BufReader;
 use std::path::Path;
 use std::str::FromStr;
-type GrothBn = Groth16<Bn254>;
+// type GrothBn = Groth16<Bn254>;
+
+// Parse circom withdraw_proving_key.json and withdraw_verification_key.json to arkwork's key
+// The parser is still under development and is currently unused
 
 pub fn parse_proving_json(proving_path: &Path, verify_path: &Path) -> ProvingKey<Bn254> {
     let file = File::open(proving_path).unwrap();

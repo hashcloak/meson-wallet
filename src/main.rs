@@ -61,6 +61,7 @@ fn main() {
     }
 }
 
+// parse user selected eoa function
 fn parse_eoa_input(input: u8, wallet: &MesonWallet) {
     if input == 0 {
         //import mnemonic
@@ -106,6 +107,7 @@ fn parse_eoa_input(input: u8, wallet: &MesonWallet) {
     }
 }
 
+// parse user selected account abstraction wallet type
 fn parse_aa_type(input: u8, aa_wallet: &Erc4337Wallet) -> Result<(), Box<dyn Error>> {
     //Simple Account
     if input == 0 {
@@ -119,6 +121,7 @@ fn parse_aa_type(input: u8, aa_wallet: &Erc4337Wallet) -> Result<(), Box<dyn Err
     Ok(())
 }
 
+// main logic of an erc4337 simple account
 fn simple_account(aa_wallet: &Erc4337Wallet) -> Result<(), Box<dyn Error>> {
     if let Ok(i) = cli::select_aa_func() {
         if i == 0 {
@@ -173,7 +176,7 @@ fn simple_account(aa_wallet: &Erc4337Wallet) -> Result<(), Box<dyn Error>> {
                 None,
             ));
             cli::confirm_user_op(&user_op, &to, &amount, &user_op_hash)?;
-            let result = rt.block_on(aa_wallet.g_send_op(user_op, &mut simple_account));
+            let result = rt.block_on(aa_wallet.send_user_op(user_op, &mut simple_account));
             println!("sent: {}", result);
         } else if i == 2 {
             //Tornado: Deposit
@@ -195,7 +198,7 @@ fn simple_account(aa_wallet: &Erc4337Wallet) -> Result<(), Box<dyn Error>> {
                 "0.1",
                 &user_op_hash,
             )?;
-            let result = rt.block_on(aa_wallet.g_send_op(user_op, &mut simple_account));
+            let result = rt.block_on(aa_wallet.send_user_op(user_op, &mut simple_account));
             println!("sent: {}", result);
         } else if i == 3 {
             //Tornado: Withdraw
@@ -224,7 +227,7 @@ fn simple_account(aa_wallet: &Erc4337Wallet) -> Result<(), Box<dyn Error>> {
                 tornado_util::TORNADO_ADDRESS.parse()?,
             ));
             cli::confirm_user_op(&user_op, tornado_util::TORNADO_ADDRESS, "0", &user_op_hash)?;
-            let result = rt.block_on(aa_wallet.g_send_op(user_op, &mut simple_account));
+            let result = rt.block_on(aa_wallet.send_user_op(user_op, &mut simple_account));
             aa_wallet.delete_tornado_note(&simple_account, note_digest);
             println!("sent: {}", result);
         } else if i == 4 {
@@ -257,6 +260,7 @@ fn simple_account(aa_wallet: &Erc4337Wallet) -> Result<(), Box<dyn Error>> {
     return Ok(());
 }
 
+// main logic of an erc4337 bls account
 fn bls_account(aa_wallet: &Erc4337Wallet) -> Result<(), Box<dyn Error>> {
     if let Ok(i) = cli::select_aa_func() {
         if i == 0 {
@@ -303,7 +307,7 @@ fn bls_account(aa_wallet: &Erc4337Wallet) -> Result<(), Box<dyn Error>> {
                 None,
             ));
             cli::confirm_user_op(&user_op, &to, &amount, &user_op_hash)?;
-            let result = rt.block_on(aa_wallet.g_send_op(user_op, &mut bls_account));
+            let result = rt.block_on(aa_wallet.send_user_op(user_op, &mut bls_account));
             println!("sent: {}", result);
         } else if i == 2 {
             //Tornado: Deposit
@@ -324,7 +328,7 @@ fn bls_account(aa_wallet: &Erc4337Wallet) -> Result<(), Box<dyn Error>> {
                 "0.1",
                 &user_op_hash,
             )?;
-            let result = rt.block_on(aa_wallet.g_send_op(user_op, &mut bls_account));
+            let result = rt.block_on(aa_wallet.send_user_op(user_op, &mut bls_account));
             println!("sent: {}", result);
         } else if i == 3 {
             //Tornado: Withdraw
@@ -352,7 +356,7 @@ fn bls_account(aa_wallet: &Erc4337Wallet) -> Result<(), Box<dyn Error>> {
                 tornado_util::TORNADO_ADDRESS.parse()?,
             ));
             cli::confirm_user_op(&user_op, tornado_util::TORNADO_ADDRESS, "0", &user_op_hash)?;
-            let result = rt.block_on(aa_wallet.g_send_op(user_op, &mut bls_account));
+            let result = rt.block_on(aa_wallet.send_user_op(user_op, &mut bls_account));
             aa_wallet.delete_tornado_note(&bls_account, note_digest);
             println!("sent: {}", result);
         } else if i == 4 {

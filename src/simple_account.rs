@@ -6,7 +6,7 @@ use ethers::prelude::k256::ecdsa::SigningKey;
 use ethers::prelude::Wallet;
 use ethers::signers::Signer;
 use ethers::types::{Address, Bytes, Signature, U256};
-use ethers::utils::{get_create2_address, hash_message, hex, keccak256};
+use ethers::utils::{get_create2_address, hex, keccak256};
 use futures::executor::block_on;
 use rand::random;
 use serde::{Deserialize, Serialize};
@@ -15,9 +15,11 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use toml::Value;
 
+// smart contract function signature
 const CREATE_ACCOUNT_SIGNATURE: &str = "0x5fbfb9cf";
 const WALLET_LOGIC_INITIALIZE_SIGNATURE: &str = "0xc4d66de8";
 
+// simple smart contract account (ECDSA), implements account trait
 #[derive(Deserialize, Serialize)]
 pub struct SimpleAccount {
     address: Address,
@@ -29,6 +31,7 @@ pub struct SimpleAccount {
 }
 
 impl SimpleAccount {
+    // create new simple account
     pub fn new<P: AsRef<Path>>(
         key_store_path: P,
         supported_accounts_path: P,
@@ -79,6 +82,7 @@ impl SimpleAccount {
         account
     }
 
+    // load a stored simple account
     pub fn load_account<P: AsRef<Path>>(key_store_path: P, address: &str) -> Self {
         let dir = key_store_path
             .as_ref()
@@ -90,9 +94,10 @@ impl SimpleAccount {
         account
     }
 
+    // return a list of stored simple accounts
     pub fn account_list<P: AsRef<Path>>(key_store_path: P) -> Vec<String> {
         let dir = key_store_path.as_ref().join("simple_account");
-        let mut files = Vec::<String>::new();
+        let files;
         match dir.read_dir() {
             Ok(entry) => {
                 files = entry
@@ -106,19 +111,7 @@ impl SimpleAccount {
         return files;
     }
 
-    pub fn verify(&self, user_op: &UserOperation, signature: &[u8]) -> bool {
-        let sig = Signature::try_from(signature).unwrap();
-        let op_hash = keccak256(AbiEncode::encode((
-            user_op.hash(),
-            self.entry_point,
-            self.chain_id,
-        )));
-        match sig.verify(hash_message(op_hash), self.owner) {
-            Ok(_) => return true,
-            Err(_) => return false,
-        };
-    }
-
+    // generate account address using create2
     pub fn create2addr<P: AsRef<Path>>(
         owner: Address,
         salt: U256,
@@ -149,6 +142,7 @@ impl SimpleAccount {
         addr
     }
 
+    // get the path for storing encrypted key
     fn get_key_path<P: AsRef<Path>>(&self, key_store_path: P) -> PathBuf {
         let addr_str = "0x".to_owned() + &hex::encode(self.address);
         key_store_path
@@ -158,6 +152,7 @@ impl SimpleAccount {
             .join("key")
     }
 
+    // get the path for storing account info
     fn get_account_path<P: AsRef<Path>>(&self, key_store_path: P) -> PathBuf {
         let addr_str = "0x".to_owned() + &hex::encode(self.address);
         key_store_path
@@ -191,6 +186,7 @@ impl SimpleAccount {
     }
 }
 
+// implement account trait for simple account
 impl Account for SimpleAccount {
     fn create_init_code<P: AsRef<Path>>(&self, supported_accounts_path: P) -> Vec<u8> {
         let mut signature = Bytes::from_str(CREATE_ACCOUNT_SIGNATURE).unwrap().to_vec();
@@ -256,6 +252,23 @@ impl Account for SimpleAccount {
 #[cfg(test)]
 mod test {
     use super::*;
+    use ethers::utils::hash_message;
+
+    impl SimpleAccount {
+        // verify the signature in an user_op
+        pub fn verify(&self, user_op: &UserOperation, signature: &[u8]) -> bool {
+            let sig = Signature::try_from(signature).unwrap();
+            let op_hash = keccak256(AbiEncode::encode((
+                user_op.hash(),
+                self.entry_point,
+                self.chain_id,
+            )));
+            match sig.verify(hash_message(op_hash), self.owner) {
+                Ok(_) => return true,
+                Err(_) => return false,
+            };
+        }
+    }
 
     #[test]
     pub fn test_store_sign() {

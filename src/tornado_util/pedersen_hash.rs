@@ -55,7 +55,6 @@ pub fn pedersen_hash<T: AsRef<[u8]>>(msg: T) -> [u8; 32] {
                 if bits[o.as_usize()] {
                     acc = -acc;
                 }
-                o += 1;
             }
 
             escalar = escalar + (acc * &exp);

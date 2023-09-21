@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use crate::bls::hash_to_point::{hash_to_point, DOMAIN};
 use ark_bn254::{Bn254, Fq, Fq2, Fr, G1Affine, G2Affine};
 use ark_ec::{pairing::Pairing, AffineRepr, CurveGroup};
@@ -8,7 +9,7 @@ use ethers::types::U256;
 use num_bigint::BigUint;
 use sha3::Keccak256;
 
-pub type SolPublicKey = [U256; 4];
+pub type BLSSolPublicKey = [U256; 4];
 pub struct PrivateKey(pub Fr);
 
 pub struct PublicKey(pub G2Affine);
@@ -43,7 +44,7 @@ impl PublicKey {
         PublicKey(g2)
     }
 
-    pub fn from_solidity_pk(s_pk: SolPublicKey) -> Self {
+    pub fn from_solidity_pk(s_pk: BLSSolPublicKey) -> Self {
         let mut pk_bytes = vec![0u8; 32];
         s_pk[0].to_big_endian(&mut pk_bytes);
         let x_c0 = BigUint::from_bytes_be(&pk_bytes);
@@ -77,7 +78,7 @@ impl PublicKey {
     }
 
     //to solidity uint256[4], different from to_uncompressed
-    pub fn to_solidity_pk(&self) -> SolPublicKey {
+    pub fn to_solidity_pk(&self) -> BLSSolPublicKey {
         let x_c0 = U256::from(BigUint::from(self.0.x.c0).to_bytes_be().as_slice());
         let x_c1 = U256::from(BigUint::from(self.0.x.c1).to_bytes_be().as_slice());
         let y_c0 = U256::from(BigUint::from(self.0.y.c0).to_bytes_be().as_slice());

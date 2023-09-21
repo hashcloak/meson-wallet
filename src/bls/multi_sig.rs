@@ -6,6 +6,7 @@ use ark_ff::Zero;
 use ethers::core::k256::sha2::Digest;
 use sha3::Keccak256;
 
+//todo: create a bls multisig account
 //Public Key for BLS Multi-sig
 pub struct MultiSigPublicKey {
     //aggregate public key
