@@ -14,6 +14,7 @@ use std::str::FromStr;
 use toml::Value;
 pub mod hash_to_point;
 pub mod multi_sig;
+pub mod multi_sig_account;
 pub mod sig;
 
 // smart contract function signature
@@ -24,7 +25,7 @@ const BLS_WALLET_LOGIC_INITIALIZE_SIGNATURE: &str = "0xee472f36";
 #[derive(Deserialize, Serialize)]
 pub struct BLSAccount {
     address: Address,
-    aggregator: Address, // supported erc4337 aggregator contract, 0x00 for not using an aggregator
+    aggregator: Address, // supported erc4337 aggregator contract, 0x00 for no aggregator
     public_key: BLSSolPublicKey, // public key stored on chain
     entry_point: Address,
     salt: U256,
@@ -187,6 +188,19 @@ impl BLSAccount {
             .unwrap();
         a.to_string()
     }
+
+    fn delete_account<P: AsRef<Path>>(
+        &self,
+        key_store_path: P,
+        _account: Address, //account to initiate the deletion, only used in multisig
+        password: &str,
+    ) {
+        let key_dir = self.get_key_path(&key_store_path);
+        Erc4337Wallet::decrypt_key(key_dir, password).unwrap();
+        let addr_str = "0x".to_owned() + &hex::encode(self.address);
+        let account_path = key_store_path.as_ref().join("bls").join(addr_str);
+        fs::remove_dir_all(&account_path).unwrap();
+    }
 }
 
 // implement account trait for bls account
@@ -272,7 +286,7 @@ mod test {
         // verify the signature in an user_op
         pub fn verify(&self, user_op: &UserOperation, signature: &[u8]) -> bool {
             let pk = self.public_key;
-            let pk = PublicKey::from_solidity_pk(pk);
+            let pk = PublicKey::from_solidity_pk(&pk);
             let user_op_hash;
             if Address::is_zero(&self.aggregator) {
                 user_op_hash = keccak256(AbiEncode::encode((
@@ -281,7 +295,6 @@ mod test {
                     self.chain_id,
                 )));
             } else {
-                //todo: user_op_hash should follow ERC standard, consider update it in contract
                 user_op_hash = keccak256(AbiEncode::encode((
                     user_op.hash(),
                     self.entry_point,

@@ -12,6 +12,7 @@ use sha3::Keccak256;
 pub type BLSSolPublicKey = [U256; 4];
 pub struct PrivateKey(pub Fr);
 
+#[derive(Clone)]
 pub struct PublicKey(pub G2Affine);
 
 impl PrivateKey {
@@ -44,7 +45,7 @@ impl PublicKey {
         PublicKey(g2)
     }
 
-    pub fn from_solidity_pk(s_pk: BLSSolPublicKey) -> Self {
+    pub fn from_solidity_pk(s_pk: &BLSSolPublicKey) -> Self {
         let mut pk_bytes = vec![0u8; 32];
         s_pk[0].to_big_endian(&mut pk_bytes);
         let x_c0 = BigUint::from_bytes_be(&pk_bytes);

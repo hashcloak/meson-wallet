@@ -13,7 +13,7 @@ pub struct UserOperation {
     // The account making the operation
     pub sender: Address,
 
-    // Anti-replay parameter; also used as the salt for first-time account creation
+    // Anti-replay parameter;
     pub nonce: U256,
 
     // The initCode of the account (needed if and only if the account is not yet on-chain and needs to be created)
