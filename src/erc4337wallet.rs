@@ -35,7 +35,7 @@ pub struct Erc4337Wallet {
     pub entrypoint: String,
 }
 
-const EXECUTE_SIGNATURE: &str = "b61d27f6";
+pub const EXECUTE_SIGNATURE: &str = "b61d27f6";
 //const NODE_RPC_URL: &str = "http://localhost:8545"; //test only, should handle by meson
 const BUNDLER_RPC_URL: &str = "http://localhost:4337"; //test only, should handle by meson
 

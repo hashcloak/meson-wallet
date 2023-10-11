@@ -16,6 +16,7 @@ use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
+use tokio::runtime::Runtime;
 
 // BLS smart contract account, implements account trait
 #[derive(Deserialize, Serialize)]
@@ -90,7 +91,18 @@ impl BLSMultiSigAccount {
         account
     }
 
-    fn sign_piece<P: AsRef<Path>>(
+    pub fn load_account<P: AsRef<Path>>(key_store_path: P, address: &str) -> Self {
+        let dir = key_store_path
+            .as_ref()
+            .join("bls_multisig")
+            .join(address)
+            .join("account");
+        let json_str = fs::read_to_string(dir).unwrap();
+        let account: Self = serde_json::from_str(&json_str).unwrap();
+        account
+    }
+
+    pub fn sign_piece<P: AsRef<Path>>(
         &self,
         key_store_path: P,
         signing_account: Address,
@@ -138,6 +150,94 @@ impl BLSMultiSigAccount {
         fs::write(sig_piece_path.join(signing_account), &sig_compressed_bytes).unwrap();
     }
 
+    pub fn create_user_op(
+        &self,
+        wallet: &Erc4337Wallet, //used to query gas info
+        to: Address,
+        amount: U256,
+        nonce: Option<U256>,
+        data: Option<Vec<u8>>,
+    ) -> (UserOperation, String) {
+        let rt = Runtime::new().unwrap();
+        let mut user_op = UserOperation::new();
+        //only include initcode if not yet deployed
+        user_op = if !self.deployed() {
+            let initcode = self.create_init_code(&wallet.supported_accounts_path);
+            user_op.init_code(initcode)
+        } else {
+            user_op
+        };
+        user_op = user_op.sender(self.address());
+
+        if let Some(n) = nonce {
+            //manully set the nonce
+            user_op = user_op.nonce(n);
+        } else {
+            //query nonce only if deployed
+            user_op = user_op.nonce(0);
+            if self.deployed() {
+                let addr_str = "0x".to_owned() + &hex::encode(self.address());
+                let nonce = rt.block_on(wallet.query_nonce(addr_str));
+                user_op = user_op.nonce(nonce);
+            }
+        }
+
+        //create calldata
+        let func_signature = Bytes::from_str(crate::erc4337wallet::EXECUTE_SIGNATURE)
+            .unwrap()
+            .to_vec();
+        let param;
+        match data {
+            Some(n) => param = AbiEncode::encode((to, amount, Bytes::from(n))),
+            None => param = AbiEncode::encode((to, amount, Bytes::default())),
+        }
+        let call_data = [func_signature, param].concat();
+        user_op = user_op.call_data(call_data);
+        user_op = user_op.verification_gas_limit(0xffffff);
+        user_op = user_op.pre_verification_gas(0xffffff);
+        user_op = user_op.max_fee_per_gas(0xffffff);
+
+        //set signature to random data for querying gas
+        user_op = user_op.signature(Bytes::from_str("0x43b8da28f2e270442c1618c6594a8b9c3cc44fd321d6135339be632af153e1fa5a00d1b1336d40091ae887b0b8d2a8a6f20b8d9818435196082f38cc46e0bad11b").unwrap());
+        let gas_info = rt.block_on(wallet.query_gas_info(self, &user_op));
+        println!("{gas_info:?}");
+
+        //shoud set the gas price from gas_info (current stackup version doesn't work)
+        user_op = user_op
+            .call_gas_imit(1500000)
+            .verification_gas_limit(1500000)
+            .pre_verification_gas(1500000)
+            .max_fee_per_gas(100)
+            .max_priority_fee_per_gas(100);
+
+        //set signature to empty bytes for signing
+        user_op = user_op.signature(Bytes::default());
+        let user_op_hash = String::from("0x")
+            + &hex::encode(keccak256(AbiEncode::encode((
+                user_op.hash(),
+                self.entry_point(),
+                self.chain_id(),
+            ))));
+        (user_op, user_op_hash)
+    }
+
+    pub fn store_user_op<P: AsRef<Path>>(
+        &self,
+        user_op: &UserOperation,
+        user_op_hash: &str,
+        key_store_path: P,
+    ) {
+        let sig_path = self.get_sig_path(&key_store_path).join(user_op_hash); //path for signature_piece & user_op
+        let sig_piece_path = sig_path.join("sig_piece"); //path for signature_piece
+
+        if !sig_path.exists() {
+            // store user_op if not already exists
+            fs::create_dir_all(&sig_piece_path).unwrap();
+            let op_path = sig_path.join("user_op");
+            fs::write(op_path, &serde_json::to_vec(&user_op).unwrap()).unwrap();
+        }
+    }
+
     fn combine_sig<P: AsRef<Path>>(&self, key_store_path: P, user_op_hash: &str) -> Vec<u8> {
         //read all signatures
         let sig_path = self
@@ -164,6 +264,21 @@ impl BLSMultiSigAccount {
         }
 
         multi_sig_combine_sig(&sigs)
+    }
+
+    pub fn account_list<P: AsRef<Path>>(key_store_path: P) -> Vec<String> {
+        let dir = key_store_path.as_ref().join("bls_multisig");
+        let files;
+        match dir.read_dir() {
+            Ok(entry) => {
+                files = entry
+                    .into_iter()
+                    .map(|f| f.unwrap().file_name().to_str().unwrap().to_owned())
+                    .collect::<Vec<String>>()
+            }
+            Err(_) => return vec![],
+        }
+        return files;
     }
 
     // get the path for storing account info

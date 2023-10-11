@@ -55,6 +55,41 @@ pub fn select_aa_func() -> Result<u8, io::Error> {
     }
 }
 
+// select multisig wallet function
+pub fn select_multisig_func() -> Result<u8, io::Error> {
+    let selections = vec![
+        "Create account",
+        "Create transaction",
+        "Confirm transaction",
+        "Send transaction",
+        "Back",
+    ];
+    let selection = dialoguer::Select::new()
+        .items(&selections)
+        .default(0)
+        .interact_on_opt(&Term::stderr())?;
+
+    match selection {
+        Some(index) => return Ok(index as u8),
+        None => return Err(io::Error::new(io::ErrorKind::Other, "")),
+    }
+}
+
+//todo: consider using this in all account types
+//select transaction type (currently only used in multisig wallet)
+pub fn select_transaction_type() -> Result<u8, io::Error> {
+    let selections = vec!["Eth transaction", "Tornado Deposit", "Tornado Withdraw"];
+    let selection = dialoguer::Select::new()
+        .items(&selections)
+        .default(0)
+        .interact_on_opt(&Term::stderr())?;
+
+    match selection {
+        Some(index) => return Ok(index as u8),
+        None => return Err(io::Error::new(io::ErrorKind::Other, "")),
+    }
+}
+
 // select eoa wallet function
 pub fn select_eoa_func() -> Result<u8, io::Error> {
     let selections = vec![
@@ -119,6 +154,19 @@ pub fn select_aa_account(accounts: &[String]) -> Result<&str, io::Error> {
 
     match selection {
         Some(index) => return Ok(&accounts[index]),
+        None => return Err(io::Error::new(io::ErrorKind::Other, "")),
+    }
+}
+
+//select multiple account abstraction wallet
+pub fn select_multiple_aa_account(accounts: &[String]) -> Result<Vec<usize>, io::Error> {
+    let selections = dialoguer::MultiSelect::new()
+        .with_prompt("Press space to select owners")
+        .items(accounts)
+        .interact_on_opt(&Term::stderr())?;
+
+    match selections {
+        Some(indices) => return Ok(indices),
         None => return Err(io::Error::new(io::ErrorKind::Other, "")),
     }
 }

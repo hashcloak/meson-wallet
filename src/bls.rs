@@ -189,6 +189,7 @@ impl BLSAccount {
         a.to_string()
     }
 
+    // todo: move it to account trait
     fn delete_account<P: AsRef<Path>>(
         &self,
         key_store_path: P,
@@ -234,7 +235,6 @@ impl Account for BLSAccount {
                 self.chain_id,
             )));
         } else {
-            //todo: user_op_hash should follow ERC standard, consider update it in contract
             user_op_hash = keccak256(AbiEncode::encode((
                 user_op.hash(),
                 keccak256(AbiEncode::encode(self.public_key)),
