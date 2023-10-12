@@ -238,6 +238,20 @@ impl BLSMultiSigAccount {
         }
     }
 
+    pub fn load_user_op<P: AsRef<Path>>(
+        &self,
+        user_op_hash: &str,
+        key_store_path: P,
+    ) -> UserOperation {
+        let dir = self
+            .get_sig_path(&key_store_path)
+            .join(user_op_hash)
+            .join("user_op");
+        let json_str = fs::read_to_string(dir).unwrap();
+        let user_op: UserOperation = serde_json::from_str(&json_str).unwrap();
+        user_op
+    }
+
     fn combine_sig<P: AsRef<Path>>(&self, key_store_path: P, user_op_hash: &str) -> Vec<u8> {
         //read all signatures
         let sig_path = self
@@ -281,6 +295,26 @@ impl BLSMultiSigAccount {
         return files;
     }
 
+    pub fn user_op_list<P: AsRef<Path>>(&self, key_store_path: P) -> Vec<String> {
+        let address = "0x".to_string() + &hex::encode(self.address);
+        let dir = key_store_path
+            .as_ref()
+            .join("bls_multisig")
+            .join(address)
+            .join("signature");
+        let files;
+        match dir.read_dir() {
+            Ok(entry) => {
+                files = entry
+                    .into_iter()
+                    .map(|f| f.unwrap().file_name().to_str().unwrap().to_owned())
+                    .collect::<Vec<String>>()
+            }
+            Err(_) => return vec![],
+        }
+        return files;
+    }
+
     // get the path for storing account info
     fn get_account_path<P: AsRef<Path>>(&self, key_store_path: P) -> PathBuf {
         let addr_str = "0x".to_owned() + &hex::encode(self.address);
@@ -309,6 +343,13 @@ impl BLSMultiSigAccount {
             .join("bls_multisig")
             .join(addr_str)
             .join("signature")
+    }
+
+    pub fn members_list(&self) -> Vec<String> {
+        self.accounts_list
+            .iter()
+            .map(|x| "0x".to_string() + &hex::encode(x))
+            .collect()
     }
 }
 

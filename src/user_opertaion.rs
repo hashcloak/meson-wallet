@@ -4,11 +4,11 @@ use ethers::abi::Address;
 use ethers::contract::{EthAbiCodec, EthAbiType};
 use ethers::core::utils::keccak256;
 use ethers::prelude::{Bytes, H256, U256};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::ops::Deref;
 
 // Parameters for user_operation
-#[derive(Clone, Default, PartialEq, Eq, Debug, EthAbiCodec, EthAbiType, Serialize)]
+#[derive(Clone, Default, PartialEq, Eq, Debug, EthAbiCodec, EthAbiType, Serialize, Deserialize)]
 pub struct UserOperation {
     // The account making the operation
     pub sender: Address,

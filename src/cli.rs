@@ -144,7 +144,7 @@ pub fn select_account(accounts: &[Account]) -> Result<&Account, io::Error> {
     }
 }
 
-// select an account abstraction wallet
+// select a eoa account wallet
 pub fn select_aa_account(accounts: &[String]) -> Result<&str, io::Error> {
     let selection = dialoguer::Select::new()
         .with_prompt("Select an account")
@@ -154,6 +154,35 @@ pub fn select_aa_account(accounts: &[String]) -> Result<&str, io::Error> {
 
     match selection {
         Some(index) => return Ok(&accounts[index]),
+        None => return Err(io::Error::new(io::ErrorKind::Other, "")),
+    }
+}
+
+// select an element from a string slice
+pub fn select_string_slice<'a>(
+    lists: &'a [String],
+    prompt: Option<&'a str>,
+) -> Result<&'a str, io::Error> {
+    let selection;
+    match prompt {
+        Some(t) => {
+            selection = dialoguer::Select::new()
+                .with_prompt(t)
+                .items(lists)
+                .default(0)
+                .interact_on_opt(&Term::stderr())?;
+        }
+
+        None => {
+            selection = dialoguer::Select::new()
+                .items(lists)
+                .default(0)
+                .interact_on_opt(&Term::stderr())?;
+        }
+    }
+
+    match selection {
+        Some(index) => return Ok(&lists[index]),
         None => return Err(io::Error::new(io::ErrorKind::Other, "")),
     }
 }
