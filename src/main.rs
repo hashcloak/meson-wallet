@@ -176,7 +176,7 @@ fn simple_account(aa_wallet: &Erc4337Wallet) -> Result<(), Box<dyn Error>> {
                 &password,
                 None,
             ));
-            cli::confirm_user_op(&user_op, &to, &amount, &user_op_hash)?;
+            cli::confirm_user_op(&user_op, &user_op_hash)?;
             let result = rt.block_on(aa_wallet.send_user_op(user_op, &mut simple_account));
             println!("sent: {}", result);
         } else if i == 2 {
@@ -193,12 +193,7 @@ fn simple_account(aa_wallet: &Erc4337Wallet) -> Result<(), Box<dyn Error>> {
                 &password,
                 tornado_util::TORNADO_ADDRESS.parse()?,
             ));
-            cli::confirm_user_op(
-                &user_op,
-                tornado_util::TORNADO_ADDRESS,
-                "0.1",
-                &user_op_hash,
-            )?;
+            cli::confirm_user_op(&user_op, &user_op_hash)?;
             let result = rt.block_on(aa_wallet.send_user_op(user_op, &mut simple_account));
             println!("sent: {}", result);
         } else if i == 3 {
@@ -227,7 +222,7 @@ fn simple_account(aa_wallet: &Erc4337Wallet) -> Result<(), Box<dyn Error>> {
                 &password,
                 tornado_util::TORNADO_ADDRESS.parse()?,
             ));
-            cli::confirm_user_op(&user_op, tornado_util::TORNADO_ADDRESS, "0", &user_op_hash)?;
+            cli::confirm_user_op(&user_op, &user_op_hash)?;
             let result = rt.block_on(aa_wallet.send_user_op(user_op, &mut simple_account));
             aa_wallet.delete_tornado_note(&simple_account, note_digest);
             println!("sent: {}", result);
@@ -317,7 +312,7 @@ fn bls_account(aa_wallet: &Erc4337Wallet) -> Result<(), Box<dyn Error>> {
                         &password,
                         None,
                     ));
-                    cli::confirm_user_op(&user_op, &to, &amount, &user_op_hash)?;
+                    cli::confirm_user_op(&user_op, &user_op_hash)?;
                     let result = rt.block_on(aa_wallet.send_user_op(user_op, &mut bls_account));
                     println!("sent: {}", result);
                 } else if i == 2 {
@@ -335,12 +330,7 @@ fn bls_account(aa_wallet: &Erc4337Wallet) -> Result<(), Box<dyn Error>> {
                             &password,
                             tornado_util::TORNADO_ADDRESS.parse()?,
                         ));
-                    cli::confirm_user_op(
-                        &user_op,
-                        tornado_util::TORNADO_ADDRESS,
-                        "0.1",
-                        &user_op_hash,
-                    )?;
+                    cli::confirm_user_op(&user_op, &user_op_hash)?;
                     let result = rt.block_on(aa_wallet.send_user_op(user_op, &mut bls_account));
                     println!("sent: {}", result);
                 } else if i == 3 {
@@ -370,12 +360,7 @@ fn bls_account(aa_wallet: &Erc4337Wallet) -> Result<(), Box<dyn Error>> {
                             &password,
                             tornado_util::TORNADO_ADDRESS.parse()?,
                         ));
-                    cli::confirm_user_op(
-                        &user_op,
-                        tornado_util::TORNADO_ADDRESS,
-                        "0",
-                        &user_op_hash,
-                    )?;
+                    cli::confirm_user_op(&user_op, &user_op_hash)?;
                     let result = rt.block_on(aa_wallet.send_user_op(user_op, &mut bls_account));
                     aa_wallet.delete_tornado_note(&bls_account, note_digest);
                     println!("sent: {}", result);
@@ -457,7 +442,7 @@ fn bls_account(aa_wallet: &Erc4337Wallet) -> Result<(), Box<dyn Error>> {
                             None,
                             None,
                         );
-                        cli::confirm_user_op(&user_op, &to, &amount, &user_op_hash)?;
+                        cli::confirm_user_op(&user_op, &user_op_hash)?;
                         multi_sig_account.store_user_op(
                             &user_op,
                             &user_op_hash,
@@ -485,12 +470,7 @@ fn bls_account(aa_wallet: &Erc4337Wallet) -> Result<(), Box<dyn Error>> {
                             None,
                             Some(tx),
                         );
-                        cli::confirm_user_op(
-                            &user_op,
-                            &tornado_util::TORNADO_ADDRESS,
-                            "0.1",
-                            &user_op_hash,
-                        )?;
+                        cli::confirm_user_op(&user_op, &user_op_hash)?;
                         multi_sig_account.store_user_op(
                             &user_op,
                             &user_op_hash,
@@ -530,12 +510,7 @@ fn bls_account(aa_wallet: &Erc4337Wallet) -> Result<(), Box<dyn Error>> {
                             None,
                             Some(tx),
                         );
-                        cli::confirm_user_op(
-                            &user_op,
-                            &tornado_util::TORNADO_ADDRESS,
-                            "0.1",
-                            &user_op_hash,
-                        )?;
+                        cli::confirm_user_op(&user_op, &user_op_hash)?;
                         multi_sig_account.store_user_op(
                             &user_op,
                             &user_op_hash,
@@ -567,6 +542,39 @@ fn bls_account(aa_wallet: &Erc4337Wallet) -> Result<(), Box<dyn Error>> {
                     println!("{} is confirmed by {}", user_op_hash, signer_str);
                 } else if i == 3 {
                     //Send transaction
+                    let accounts = BLSMultiSigAccount::account_list(&aa_wallet.key_store_path);
+                    let address = cli::select_aa_account(&accounts)?;
+                    let mut multi_sig_account =
+                        BLSMultiSigAccount::load_account(&aa_wallet.key_store_path, address);
+                    let user_ops = multi_sig_account.user_op_list(&aa_wallet.key_store_path);
+                    let user_op_hash =
+                        cli::select_string_slice(&user_ops, Some("Select a userOp"))?;
+
+                    // check if there are sufficient signatures
+                    let multi_sig_members_len = multi_sig_account.members_list().len();
+                    let sig_path = multi_sig_account
+                        .get_sig_path(&aa_wallet.key_store_path)
+                        .join(user_op_hash)
+                        .join("sig_piece");
+                    let sig_num = match sig_path.read_dir() {
+                        Ok(entry) => entry.count(),
+                        Err(_) => panic!("invalid account"),
+                    };
+                    if sig_num < multi_sig_members_len {
+                        return Err("insufficient confirmations".into());
+                    }
+
+                    let sig =
+                        multi_sig_account.combine_sig(&aa_wallet.key_store_path, user_op_hash);
+                    let user_op =
+                        multi_sig_account.load_user_op(user_op_hash, &aa_wallet.key_store_path);
+                    let user_op = user_op.signature(sig);
+
+                    cli::confirm_user_op(&user_op, &user_op_hash)?;
+                    let rt = Runtime::new().unwrap();
+                    let result =
+                        rt.block_on(aa_wallet.send_user_op(user_op, &mut multi_sig_account));
+                    println!("sent: {}", result);
                 }
             }
         }

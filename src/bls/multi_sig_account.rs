@@ -1,10 +1,10 @@
 use crate::bls::sig::{PrivateKey, PublicKey};
+use crate::bls::BLSAccount;
 use crate::bls::{multi_sig, multi_sig::multi_sig_combine_sig, multi_sig::MultiSigPublicKey};
-use crate::bls::{BLSAccount, BLSSolPublicKey};
 use crate::erc4337_common::Account;
 use crate::user_opertaion::UserOperation;
-use crate::{error, Erc4337Wallet};
-use ark_bn254::{Fr, G1Affine, G1Projective, G2Projective};
+use crate::Erc4337Wallet;
+use ark_bn254::{G1Affine, G1Projective};
 use ark_ec::CurveGroup;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use ethers::abi::AbiEncode;
@@ -252,7 +252,7 @@ impl BLSMultiSigAccount {
         user_op
     }
 
-    fn combine_sig<P: AsRef<Path>>(&self, key_store_path: P, user_op_hash: &str) -> Vec<u8> {
+    pub fn combine_sig<P: AsRef<Path>>(&self, key_store_path: P, user_op_hash: &str) -> Vec<u8> {
         //read all signatures
         let sig_path = self
             .get_sig_path(&key_store_path)
@@ -316,7 +316,7 @@ impl BLSMultiSigAccount {
     }
 
     // get the path for storing account info
-    fn get_account_path<P: AsRef<Path>>(&self, key_store_path: P) -> PathBuf {
+    pub fn get_account_path<P: AsRef<Path>>(&self, key_store_path: P) -> PathBuf {
         let addr_str = "0x".to_owned() + &hex::encode(self.address);
         key_store_path
             .as_ref()
@@ -326,7 +326,7 @@ impl BLSMultiSigAccount {
     }
 
     // get the path for storing encrypted key
-    fn get_key_path<P: AsRef<Path>>(addr: Address, key_store_path: P) -> PathBuf {
+    pub fn get_key_path<P: AsRef<Path>>(addr: Address, key_store_path: P) -> PathBuf {
         let addr_str = "0x".to_owned() + &hex::encode(addr);
         key_store_path
             .as_ref()
@@ -336,7 +336,7 @@ impl BLSMultiSigAccount {
     }
 
     // get the path for storing signature piece
-    fn get_sig_path<P: AsRef<Path>>(&self, key_store_path: P) -> PathBuf {
+    pub fn get_sig_path<P: AsRef<Path>>(&self, key_store_path: P) -> PathBuf {
         let addr_str = "0x".to_owned() + &hex::encode(self.address);
         key_store_path
             .as_ref()
@@ -428,6 +428,7 @@ impl Account for BLSMultiSigAccount {
     }
 }
 
+#[cfg(test)]
 mod test {
     use super::*;
 

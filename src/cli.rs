@@ -275,12 +275,7 @@ pub fn confirm_tx(tx: &TypedTransaction) -> Result<(), io::Error> {
 }
 
 // prompt for erc4337 user operation confirmation
-pub fn confirm_user_op(
-    user_op: &UserOperation,
-    to: &str,
-    amount: &str,
-    user_op_hash: &str,
-) -> Result<(), io::Error> {
+pub fn confirm_user_op(user_op: &UserOperation, user_op_hash: &str) -> Result<(), io::Error> {
     let sender = "0x".to_owned() + &hex::encode(user_op.sender.as_bytes());
     let nonce = user_op.nonce.to_string();
     let call_gas_limit = user_op.callGasLimit.to_string();
@@ -289,11 +284,16 @@ pub fn confirm_user_op(
     let max_fee_per_gas = user_op.maxFeePerGas.to_string();
     let max_priority_fee_per_gas = user_op.maxPriorityFeePerGas.to_string();
     let data = user_op.paymasterAndData.to_string();
+    let to = user_op.get_receipient();
+    let amount = user_op.get_amount();
+    _ = user_op.get_data();
+    _ = user_op.get_function_signature();
+
     println!("====================================");
     println!("userOp hash:{}", user_op_hash);
     println!("sender: {}", sender);
     println!("receiver: {}", to);
-    println!("amount: {}wei", amount);
+    println!("amount: {} wei", amount);
     println!("nonce: {}", nonce);
     println!("call gas limit: {}", call_gas_limit);
     println!("verification gas limit: {}", verification_gas_limit);

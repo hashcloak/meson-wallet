@@ -4,6 +4,7 @@ use ethers::abi::Address;
 use ethers::contract::{EthAbiCodec, EthAbiType};
 use ethers::core::utils::keccak256;
 use ethers::prelude::{Bytes, H256, U256};
+use ethers::utils::hex;
 use serde::{Deserialize, Serialize};
 use std::ops::Deref;
 
@@ -140,6 +141,26 @@ impl UserOperation {
         let bytes = self.pack();
         let hash = keccak256(bytes);
         hash
+    }
+
+    // return the function signature called in wallet contract
+    pub fn get_function_signature(&self) -> String {
+        "0x".to_string() + &hex::encode(&self.callData[..4])
+    }
+
+    // return the receipient of a userOp
+    pub fn get_receipient(&self) -> String {
+        "0x".to_string() + &hex::encode(&self.callData[16..36])
+    }
+
+    // return the amount of a userOp
+    pub fn get_amount(&self) -> U256 {
+        U256::from_big_endian(&self.callData[36..68])
+    }
+
+    // return the data of a userOp
+    pub fn get_data(&self) -> String {
+        hex::encode(&self.callData[68..])
     }
 }
 
