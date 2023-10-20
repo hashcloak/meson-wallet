@@ -1,13 +1,15 @@
 #![allow(non_camel_case_types)]
 #![allow(non_snake_case)]
 use crate::error::{MesonError, MesonWalletError, MnemonicError};
-use crate::{cli, meson_common};
+use crate::meson_util::meson_provider::MesonProvider;
+use crate::{cli, meson_util};
 use aes::cipher::{KeyIvInit, StreamCipher};
 use base64ct::{Base64, Encoding};
 use dialoguer::{console, Confirm, Input};
 use ethers::abi::Address;
 use ethers::prelude::{k256::ecdsa::SigningKey, *};
 use ethers::signers::coins_bip39::{English, Mnemonic};
+use ethers::signers::Wallet;
 use ethers::types::transaction::eip2718::TypedTransaction;
 use ethers::utils::hex;
 use futures::executor::block_on;
@@ -41,7 +43,7 @@ pub struct MesonWallet {
     chain: HashMap<String, chainInfo>,
 }
 
-#[derive(serde::Deserialize)]
+#[derive(serde::Deserialize, Debug)]
 struct chainInfo {
     ticker: String,
     //endpoint: String,
@@ -184,7 +186,7 @@ impl MesonWallet {
         Ok(())
     }
 
-    pub fn send_transaction(&self) -> Result<String, Box<dyn Error>> {
+    pub async fn send_transaction(&self) -> Result<String, Box<dyn Error>> {
         let accounts = self.saved_accounts()?;
         if accounts.len() == 0 {
             return Err("Empty account list".into());
@@ -200,76 +202,46 @@ impl MesonWallet {
             .with_prompt("Value in Wei")
             .interact_on(&term)?;
         let value = U256::from_dec_str(&value)?;
-        let chain_id = Input::<U64>::new()
+        let chain_id = Input::<u64>::new()
             .with_prompt("Chain ID")
             .interact_on(&term)?;
+        let ticker = self.ticker(chain_id)?;
 
-        meson_register(
-            self.meson_setting_path
-                .to_str()
-                .ok_or(MesonWalletError::MesonWalletError("error".to_string()))?,
-        );
-        defer!(meson_close_conn());
+        let meson = MesonProvider::new(&self.meson_setting_path, ticker)?;
+        let meson_provider = Provider::new(meson);
+        let tx_req = Eip1559TransactionRequest::new()
+            .from(from_addr)
+            .to(to_addr)
+            .value(value)
+            .chain_id(chain_id);
 
-        println!("Querying gas info through meson...");
-        let tx = self.fill_tx(from_addr, to_addr, value, chain_id, "".to_string())?; //query gas info from meson
+        // query nonce
+        println!("Querying nonce info...");
+        let mut tx = TypedTransaction::Eip1559(tx_req);
+        let nonce = meson_provider
+            .get_transaction_count(from_addr, None)
+            .await?;
+        tx.set_nonce(nonce);
         let _ = term.clear_last_lines(1);
+
+        // query gas
+        println!("Querying gas info...");
+        meson_provider.fill_transaction(&mut tx, None).await?;
+        let _ = term.clear_last_lines(1);
+
+        // sign transaction
         cli::confirm_tx(&tx)?;
         let password = cli::prompt_password()?;
         let wallet = Wallet::decrypt_keystore(&selected_account.path, password)?;
-
-        //sign transaction
         let signature = block_on(wallet.sign_transaction(&tx))?;
-        let rlp_tx = tx.rlp_signed(&signature);
+        let tx = tx.rlp_signed(&signature);
 
-        println!("Sending transaction through meson...");
-        let ticker = self.ticker(chain_id)?;
-        let tx_hash = process_transaction(rlp_tx, ticker)?;
+        println!("Sending transaction...");
+        let tx_hash = meson_provider.send_raw_transaction(tx).await?;
         let _ = term.clear_last_lines(1);
-        println!("Tx hash: {}", tx_hash);
 
-        Ok(tx_hash)
-    }
-
-    //fill tx with gas info
-    pub fn fill_tx(
-        &self,
-        from: Address,
-        to: Address,
-        value: U256,
-        chain_id: U64,
-        data: String,
-    ) -> Result<TypedTransaction, MesonError> {
-        let ticker = self.ticker(chain_id)?;
-        let query_return = meson_eth_query(from, to, value, ticker, data)?;
-        let gas_info: meson_common::EthQueryResponse = serde_json::from_str(&query_return).unwrap();
-
-        let mut gas = gas_info.GasLimit.strip_prefix("0x").unwrap().to_string();
-        if gas.len() % 2 != 0 {
-            gas = "0".to_string() + &gas;
-        }
-        let gas = U256::from_big_endian(&hex::decode(gas).unwrap()[..]);
-        let mut gas_price = gas_info.GasPrice.strip_prefix("0x").unwrap().to_string();
-        if gas_price.len() % 2 != 0 {
-            gas_price = "0".to_string() + &gas_price;
-        }
-        let gas_price = U256::from_big_endian(&hex::decode(gas_price).unwrap()[..]);
-        let mut nonce = gas_info.Nonce.strip_prefix("0x").unwrap().to_string();
-        if nonce.len() % 2 != 0 {
-            nonce = "0".to_string() + &nonce;
-        }
-        let nonce = U256::from_big_endian(&hex::decode(nonce).unwrap()[..]);
-        let pay_tx = TransactionRequest::new()
-            .from(from)
-            .to(to)
-            .value(value)
-            .chain_id(chain_id)
-            .gas(gas)
-            .gas_price(gas_price)
-            .nonce(nonce)
-            .into();
-
-        Ok(pay_tx)
+        println!("Tx hash: {}", tx_hash.to_string());
+        Ok(tx_hash.to_string())
     }
 
     //show all saved accounts
@@ -345,7 +317,7 @@ impl MesonWallet {
         Ok(())
     }
 
-    pub fn ticker(&self, chain_id: U64) -> Result<&str, MesonError> {
+    pub fn ticker(&self, chain_id: u64) -> Result<&str, MesonError> {
         match self.chain.get(&chain_id.to_string()) {
             Some(info) => return Ok(&info.ticker),
             None => return Err(MesonError::MesonError("Unsupport chain id".into())),
@@ -387,109 +359,6 @@ impl MesonWallet {
 
         Ok(())
     }
-}
-
-//register on meson through ffi
-pub fn meson_register(path: &str) {
-    let configFile = CString::new(path).expect("CString::new failed");
-    unsafe {
-        Register(configFile.into_raw());
-        NewClient(
-            CString::new(MESON_SERVICE)
-                .expect("CString::new failed")
-                .into_raw(),
-        );
-        NewSession();
-        GetService(
-            CString::new(MESON_SERVICE)
-                .expect("CString::new failed")
-                .into_raw(),
-        );
-    }
-}
-
-//send a meson request
-fn meson_send(mut req: Vec<u8>) -> Result<String, MesonError> {
-    unsafe {
-        let meson_raw_return = BlockingSendUnreliableMessage(
-            req.as_mut_ptr() as *mut c_void,
-            req.len().try_into().expect("len error"),
-        );
-        let meson_return = &*std::ptr::slice_from_raw_parts_mut(
-            meson_raw_return.r0 as *mut u8,
-            meson_raw_return.r1.try_into().expect("len error"),
-        );
-
-        let mut meson_return: Vec<u8> = meson_return
-            .to_vec()
-            .into_iter()
-            .rev()
-            .skip_while(|&x| x == 0)
-            .collect();
-        meson_return.reverse(); // clear the tailing zeros
-        let meson_response = meson_common::MesonCurrencyResponse::from_json(&meson_return[..]);
-
-        let error = meson_response.Error;
-        let response = meson_response.Message;
-        if error != "" {
-            return Err(MesonError::MesonError(error));
-        }
-        Ok(response)
-    }
-}
-
-//qeury gas info from meson
-pub fn meson_eth_query(
-    from: Address,
-    to: Address,
-    value: U256,
-    ticker: &str,
-    data: String,
-) -> Result<String, MesonError> {
-    let json_value = serde_json::Number::from_string_unchecked(value.to_string()); //for serialize big_number
-    let query = meson_common::EthQueryRequest {
-        From: from,
-        To: to,
-        Value: json_value,
-        Data: data,
-    };
-    let query = query.to_json();
-    // println!("query: {:?}", std::str::from_utf8(&query[..]));
-    let query = base64ct::Base64::encode_string(&query[..]);
-    //todo: check if really needs to use base64 query
-    let req = meson_common::MesonCurrencyRequest {
-        Version: 0,
-        Command: meson_common::ETH_QUERY,
-        Ticker: ticker.to_owned(),
-        Payload: query,
-    };
-    let resp = meson_send(req.to_json())?;
-
-    Ok(resp)
-}
-
-pub fn meson_close_conn() {
-    unsafe {
-        Shutdown();
-    }
-}
-
-//encode raw tx to meson request
-pub fn process_transaction(tx_bytes: Bytes, ticker: &str) -> Result<String, MesonError> {
-    let meson_tx = meson_common::PostTransactionRequest {
-        TxHex: tx_bytes.to_string(),
-    }
-    .to_json();
-    let meson_tx = base64ct::Base64::encode_string(&meson_tx[..]);
-    let req = meson_common::MesonCurrencyRequest {
-        Version: 0,
-        Command: meson_common::POST_TRANSACTION,
-        Ticker: ticker.to_owned(),
-        Payload: meson_tx,
-    };
-    let resp = meson_send(req.to_json())?;
-
-    Ok(resp)
 }
 
 //Derive keys from given mnemonic and index
@@ -637,10 +506,6 @@ pub fn _ping() {
         let message = std::str::from_utf8(packet).unwrap();
         println!("Got: {}", message);
         Shutdown();
-
-        //todo: where to free the memory?
-        // let c_str = unsafe { CStr::from_ptr(meson_return) };
-        // let str_slice = c_str.to_str().unwrap();
     }
 }
 pub fn _ping_unblock() {
@@ -683,7 +548,10 @@ pub fn _ping_unblock() {
 #[cfg(test)]
 
 mod tests {
+    use crate::meson_util::meson_provider::MesonProvider;
+
     use super::*;
+    use serde_json::json;
     use tempdir::TempDir;
     #[test]
     fn mnemonic_build() {
@@ -754,5 +622,20 @@ mod tests {
                 .unwrap();
 
         assert_eq!(wallet, wallet2);
+    }
+
+    #[tokio::test]
+    async fn test_meson_provider() {
+        let p = PathBuf::from_str("./client.example.toml").unwrap();
+        let meson = MesonProvider::new(&p, "gor").unwrap();
+        let meson_provider = Provider::new(meson);
+        let nonce: U256 = meson_provider
+            .request(
+                "eth_getTransactionCount",
+                json!(["0x9A0b9c80dBd6323876bA706e892d27E47cd55FA5", "pending"]),
+            )
+            .await
+            .unwrap();
+        println!("nonce:{:?}", nonce);
     }
 }

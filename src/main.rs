@@ -18,7 +18,8 @@ mod erc4337_common;
 use tokio::runtime::Runtime;
 mod erc4337wallet;
 mod error;
-mod meson_common;
+mod json_rpc;
+mod meson_util;
 mod simple_account;
 mod tornado_util;
 mod user_opertaion;
@@ -93,7 +94,8 @@ fn parse_eoa_input(input: u8, wallet: &MesonWallet) {
         };
     } else if input == 4 {
         //Send transaction
-        if let Err(error) = wallet.send_transaction() {
+        let rt = Runtime::new().unwrap();
+        if let Err(error) = rt.block_on(wallet.send_transaction()) {
             println!("{}", error);
         }
     } else if input == 5 {

@@ -1,3 +1,4 @@
+use ethers::prelude::ProviderError;
 use thiserror::Error;
 
 //todo: clean up error type after DirectPost update
@@ -63,6 +64,21 @@ impl From<base64ct::Error> for MnemonicError {
 pub enum MesonError {
     #[error("MesonError: {0}")]
     MesonError(String),
+    #[error("RPCError: {0}")]
+    RPCError(String),
+    #[error("SerdeError: {0}")]
+    SerdeError(String),
+}
+
+impl From<serde_json::Error> for MesonError {
+    fn from(e: serde_json::Error) -> Self {
+        Self::SerdeError(e.to_string())
+    }
+}
+impl From<MesonError> for ProviderError {
+    fn from(src: MesonError) -> Self {
+        ProviderError::JsonRpcClientError(Box::new(src))
+    }
 }
 
 #[derive(Error, Debug)]
