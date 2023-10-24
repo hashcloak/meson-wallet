@@ -424,7 +424,7 @@ mod tests {
 
     #[tokio::test]
     pub async fn test_nonce() {
-        let wallet_config_path = PathBuf::from("wallet_config.toml");
+        let wallet_config_path = PathBuf::from("./configuration/wallet_config.toml");
         let wallet = Erc4337Wallet::new(wallet_config_path);
         let nonce = wallet
             .query_nonce("0xca45fe0684c78401e48c853fc911a93ef77a1b31".into())
@@ -435,7 +435,7 @@ mod tests {
     use crate::bls::BLSAccount;
     #[tokio::test]
     pub async fn test_bls_send_op() {
-        let wallet_config_path = PathBuf::from("wallet_config.toml");
+        let wallet_config_path = PathBuf::from("./configuration/wallet_config.toml");
         let wallet = Erc4337Wallet::new(wallet_config_path);
         let path = &wallet.key_store_path;
         let addr_str = "0x11a06b6ac30dc0fedfb7c7b8660f032c67c2a7f7";
@@ -460,7 +460,7 @@ mod tests {
     use crate::simple_account::SimpleAccount;
     #[tokio::test]
     pub async fn test_simple_send_op() {
-        let wallet_config_path = PathBuf::from("wallet_config.toml");
+        let wallet_config_path = PathBuf::from("./configuration/wallet_config.toml");
         let wallet = Erc4337Wallet::new(wallet_config_path);
         let path = &wallet.key_store_path;
         let addr_str = "0xa9f91eba34bcedb773248c06f4ee99a5f69befd2";
@@ -487,7 +487,7 @@ mod tests {
     //increase gas if failed
     //for some version of bundler, needs to disable gas query to endable tornado cash
     pub async fn test_g_tornado_deposit() {
-        let wallet_config_path = PathBuf::from("wallet_config.toml");
+        let wallet_config_path = PathBuf::from("./configuration/wallet_config.toml");
         let wallet = Erc4337Wallet::new(wallet_config_path);
         let path = &wallet.key_store_path;
         let addr_str = "0x11a06b6ac30dc0fedfb7c7b8660f032c67c2a7f7";
@@ -509,7 +509,7 @@ mod tests {
     //increase gas if failed
     //for some version of bundler, needs to disable gas query to endable tornado cash
     pub async fn test_g_tornado_withdraw() {
-        let wallet_config_path = PathBuf::from("wallet_config.toml");
+        let wallet_config_path = PathBuf::from("./configuration/wallet_config.toml");
         let wallet = Erc4337Wallet::new(wallet_config_path);
         let path = &wallet.key_store_path;
         let addr_str = "0x3df21301e2b4d3da7ec3762f1cb6f8e8e3092230";

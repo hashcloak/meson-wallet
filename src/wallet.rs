@@ -2,7 +2,7 @@
 #![allow(non_snake_case)]
 use crate::error::{MesonError, MesonWalletError, MnemonicError};
 use crate::meson_util::meson_provider::MesonProvider;
-use crate::{cli, meson_util};
+use crate::{cli, meson_util::bindings};
 use aes::cipher::{KeyIvInit, StreamCipher};
 use base64ct::{Base64, Encoding};
 use dialoguer::{console, Confirm, Input};
@@ -23,7 +23,6 @@ use std::fmt;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
-include!("../bindings.rs");
 
 type Aes128Ctr = ctr::Ctr64LE<aes::Aes128>;
 
@@ -468,23 +467,21 @@ where
 }
 
 pub fn _ping() {
-    let configFile = CString::new(
-        "/Users/liaoyuchen/Developer/hashcloak/meson/meson-wallet/meson-wallet/client.example.toml",
-    )
-    .expect("CString::new failed");
+    let configFile =
+        CString::new("./configuration/client.example.toml").expect("CString::new failed");
     unsafe {
         println!("Register");
-        Register(configFile.into_raw());
+        bindings::Register(configFile.into_raw());
         println!("NewClient");
-        NewClient(
+        bindings::NewClient(
             CString::new("echo")
                 .expect("CString::new failed")
                 .into_raw(),
         );
         println!("NewSession");
-        NewSession();
+        bindings::NewSession();
         println!("GetService");
-        GetService(
+        bindings::GetService(
             CString::new("echo")
                 .expect("CString::new failed")
                 .into_raw(),
@@ -493,7 +490,7 @@ pub fn _ping() {
         println!("Sending: \"{}\"", hello);
         let chello = CString::new(hello).unwrap();
         let chello = chello.as_bytes_with_nul().as_ptr() as *mut c_void;
-        let meson_return = BlockingSendUnreliableMessage(chello, 5);
+        let meson_return = bindings::BlockingSendUnreliableMessage(chello, 5);
         let slice_return = &*std::ptr::slice_from_raw_parts_mut(
             meson_return.r0 as *mut u8,
             meson_return.r1.try_into().unwrap(),
@@ -505,27 +502,25 @@ pub fn _ping() {
         let packet = &(slice_return[packet_start..packet_start + packet_len]);
         let message = std::str::from_utf8(packet).unwrap();
         println!("Got: {}", message);
-        Shutdown();
+        bindings::Shutdown();
     }
 }
 pub fn _ping_unblock() {
-    let configFile = CString::new(
-        "/Users/liaoyuchen/Developer/hashcloak/meson/meson-wallet/meson-wallet/client.example.toml",
-    )
-    .expect("CString::new failed");
+    let configFile =
+        CString::new("./configuration/client.example.toml").expect("CString::new failed");
     unsafe {
         println!("Register");
-        Register(configFile.into_raw());
+        bindings::Register(configFile.into_raw());
         println!("NewClient");
-        NewClient(
+        bindings::NewClient(
             CString::new("echo")
                 .expect("CString::new failed")
                 .into_raw(),
         );
         println!("NewSession");
-        NewSession();
+        bindings::NewSession();
         println!("GetService");
-        GetService(
+        bindings::GetService(
             CString::new("echo")
                 .expect("CString::new failed")
                 .into_raw(),
@@ -534,14 +529,14 @@ pub fn _ping_unblock() {
         println!("Sending: \"{}\"", hello);
         let chello = CString::new(hello).unwrap();
         let chello = chello.as_bytes_with_nul().as_ptr() as *mut c_void;
-        let meson_return = SendUnreliableMessage(chello, 5);
+        let meson_return = bindings::SendUnreliableMessage(chello, 5);
         let slice_return = &*std::ptr::slice_from_raw_parts_mut(
             meson_return.r0 as *mut u8,
             meson_return.r1.try_into().unwrap(),
         );
 
         println!("MsgID:{:?}", ethers::utils::hex::encode(slice_return));
-        Shutdown();
+        bindings::Shutdown();
     }
 }
 
@@ -626,7 +621,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_meson_provider() {
-        let p = PathBuf::from_str("./client.example.toml").unwrap();
+        let p = PathBuf::from_str("./configuration/client.example.toml").unwrap();
         let meson = MesonProvider::new(&p, "gor").unwrap();
         let meson_provider = Provider::new(meson);
         let nonce: U256 = meson_provider

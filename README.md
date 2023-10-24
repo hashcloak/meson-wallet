@@ -7,7 +7,7 @@ A privacy-first cryptocurrency wallet
 $ go build -o ./lib/libclient_bindings.so -buildmode=c-shared ./lib/bindings.go
 ```
 
-2. Follow the steps at [Meson local testnet](https://github.com/hashcloak/Meson/tree/master/testnet/local) to set up a testnet and update ./client.example.toml.
+2. Follow the steps at [Meson local testnet](https://github.com/hashcloak/Meson/tree/master/testnet/local) to set up a testnet and update ./configuration/client.example.toml.
 
 3. Start the wallet
 ```BASH
@@ -21,7 +21,7 @@ Currently erc4337 wallet have not integraded with meson yet. Please use test fun
 1. Install smart contract dependencies with foundry.
 ```Bash
 $ cd smartWallet
-$ forge install
+$ forge install --config-path ./configuration/foundry.toml
 ```
 
 2. Create `smartWallet/.env` and deploy smart contracts to network of choice with `smartWallet/script/Deploy.s.sol` as decribed in [Foundry Book](https://book.getfoundry.sh/tutorials/solidity-scripting#deploying-our-contract).

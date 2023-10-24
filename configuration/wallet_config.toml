@@ -1,6 +1,6 @@
 key_store_path = "./keystore"
-meson_setting_path = "./client.example.toml"
-supported_accounts_path = "./accounts.toml"
+meson_setting_path = "./configuration/client.example.toml"
+supported_accounts_path = "./configuration/accounts.toml"
 entrypoint = "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789"
 
 [chain]

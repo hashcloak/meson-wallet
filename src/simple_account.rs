@@ -272,7 +272,7 @@ mod test {
 
     #[test]
     pub fn test_store_sign() {
-        let wallet_config_path = PathBuf::from("wallet_config.toml");
+        let wallet_config_path = PathBuf::from("./configuration/wallet_config.toml");
         let wallet = Erc4337Wallet::new(&wallet_config_path);
         let mut sk =
             hex::decode("e8c5f93586d072c41f2e708d9f5dfcff6260c1d92d37be868f82adc99ad3439d")

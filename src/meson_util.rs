@@ -1,9 +1,9 @@
 #![allow(non_snake_case)]
+use crate::error::MesonError;
 use crate::json_rpc::{JsonRequest, JsonResponse};
 use crate::meson_util::bindings::{
     BlockingSendUnreliableMessage, GetService, NewClient, NewSession, Register, Shutdown,
 };
-use crate::{error::MesonError, user_opertaion};
 use base64ct::Encoding;
 use ethers::prelude::{Address, U256};
 use ethers::utils::hex;
@@ -11,10 +11,7 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::value::Value;
 use serde_json::{json, Number};
-use std::{
-    ffi::{c_void, CString},
-    ops::Add,
-};
+use std::ffi::{c_void, CString};
 
 pub mod bindings;
 pub mod meson_provider;
@@ -169,7 +166,7 @@ fn meson_register(path: &str) {
 //send a meson request
 pub fn meson_send<R: DeserializeOwned>(mut req: Vec<u8>) -> Result<R, MesonError> {
     unsafe {
-        let meson_raw_return = bindings::BlockingSendUnreliableMessage(
+        let meson_raw_return = BlockingSendUnreliableMessage(
             req.as_mut_ptr() as *mut c_void,
             req.len().try_into().expect("len error"),
         );

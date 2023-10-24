@@ -308,7 +308,7 @@ mod test {
 
     #[test]
     pub fn test_store_sign_bls() {
-        let wallet_config_path = PathBuf::from("wallet_config.toml");
+        let wallet_config_path = PathBuf::from("./configuration/wallet_config.toml");
         let wallet = Erc4337Wallet::new(&wallet_config_path);
         let bls_account = BLSAccount::new(
             &wallet.key_store_path,

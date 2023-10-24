@@ -30,7 +30,7 @@ fn main() {
     let wallet_config_path: &str;
     match args.get(1) {
         Some(path) => wallet_config_path = path,
-        None => wallet_config_path = "wallet_config.toml",
+        None => wallet_config_path = "./configuration/wallet_config.toml",
     }
     let wallet = MesonWallet::new(wallet_config_path);
     let aa_wallet = Erc4337Wallet::new(wallet_config_path);
