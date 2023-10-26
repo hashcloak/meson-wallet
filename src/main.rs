@@ -1,8 +1,8 @@
 use crate::bls::{multi_sig_account::BLSMultiSigAccount, BLSAccount};
+use crate::erc4337_common::Account;
 use crate::tornado_util::Deposit;
 use dialoguer::console::Term;
 use dialoguer::{console, Confirm, Input};
-use erc4337_common::Account;
 use erc4337wallet::Erc4337Wallet;
 use ethers::types::{Address, U256};
 use ethers::utils::hex;
@@ -33,7 +33,7 @@ fn main() {
         None => wallet_config_path = "./configuration/wallet_config.toml",
     }
     let wallet = MesonWallet::new(wallet_config_path);
-    let aa_wallet = Erc4337Wallet::new(wallet_config_path);
+    let aa_wallet = Erc4337Wallet::new(wallet_config_path).expect("invalid wallet config");
     loop {
         match cli::select_wallet_type() {
             Ok(input) => {
@@ -152,16 +152,16 @@ fn simple_account(aa_wallet: &Erc4337Wallet) -> Result<(), Box<dyn Error>> {
                 owner_sk.as_mut(),
                 U256::from_dec_str(&chain_id)?,
                 &password,
-            );
+            )?;
             let account_addr = "0x".to_owned() + &hex::encode(account.address());
             println!("New account: {}", account_addr);
         } else if i == 1 {
             //Send transaction
             let term = console::Term::stderr();
-            let accounts = SimpleAccount::account_list(&aa_wallet.key_store_path);
+            let accounts = SimpleAccount::account_list(&aa_wallet.key_store_path)?;
             let address = cli::select_aa_account(&accounts)?;
             let mut simple_account =
-                SimpleAccount::load_account(&aa_wallet.key_store_path, address);
+                SimpleAccount::load_account(&aa_wallet.key_store_path, address)?;
             let to = Input::<String>::new()
                 .with_prompt("Send to")
                 .interact_on(&term)?;
@@ -169,68 +169,84 @@ fn simple_account(aa_wallet: &Erc4337Wallet) -> Result<(), Box<dyn Error>> {
             let amount = Input::<String>::new()
                 .with_prompt("Amount")
                 .interact_on(&term)?;
+            let chain_id = Input::<String>::new()
+                .with_prompt("Chain ID")
+                .interact_on(&term)?;
             let password = cli::prompt_password()?;
             let rt = Runtime::new().unwrap();
             let (user_op, user_op_hash) = rt.block_on(aa_wallet.fill_user_op(
                 &simple_account,
                 to_addr,
                 U256::from_dec_str(&amount)?,
+                U256::from_dec_str(&chain_id)?,
                 &password,
                 None,
-            ));
+            ))?;
             cli::confirm_user_op(&user_op, &user_op_hash)?;
             let result = rt.block_on(aa_wallet.send_user_op(user_op, &mut simple_account));
             println!("sent: {}", result);
         } else if i == 2 {
             //Tornado: Deposit
-            let accounts = SimpleAccount::account_list(&aa_wallet.key_store_path);
+            let term = console::Term::stderr();
+            let accounts = SimpleAccount::account_list(&aa_wallet.key_store_path)?;
             let address = cli::select_aa_account(&accounts)?;
+            let chain_id = Input::<String>::new()
+                .with_prompt("Chain ID")
+                .interact_on(&term)?;
             let password = cli::prompt_password()?;
             let mut simple_account =
-                SimpleAccount::load_account(&aa_wallet.key_store_path, address);
+                SimpleAccount::load_account(&aa_wallet.key_store_path, address)?;
             let rt = Runtime::new().unwrap();
             let (user_op, user_op_hash) = rt.block_on(aa_wallet.fill_tornado_deposit_user_op(
                 "0.1",
                 &simple_account,
+                U256::from_dec_str(&chain_id)?,
                 &password,
                 tornado_util::TORNADO_ADDRESS.parse()?,
-            ));
+            ))?;
             cli::confirm_user_op(&user_op, &user_op_hash)?;
             let result = rt.block_on(aa_wallet.send_user_op(user_op, &mut simple_account));
             println!("sent: {}", result);
         } else if i == 3 {
             //Tornado: Withdraw
-            let accounts = SimpleAccount::account_list(&aa_wallet.key_store_path);
+            let accounts = SimpleAccount::account_list(&aa_wallet.key_store_path)?;
             let address = cli::select_aa_account(&accounts)?;
             let password = cli::prompt_password()?;
             let term = console::Term::stderr();
             let to = Input::<String>::new()
                 .with_prompt("recipient")
                 .interact_on(&term)?;
+            let chain_id = U256::from_dec_str(
+                &Input::<String>::new()
+                    .with_prompt("Chain ID")
+                    .interact_on(&term)?,
+            )?;
             let mut simple_account =
-                SimpleAccount::load_account(&aa_wallet.key_store_path, address);
-            let notes = aa_wallet.tornado_note_lists(&simple_account);
+                SimpleAccount::load_account(&aa_wallet.key_store_path, address)?;
+            let notes = aa_wallet.tornado_note_lists(&simple_account, chain_id)?;
             if notes.len() == 0 {
                 return Err("No tornado note under this account".into());
             };
             let note_digest = cli::select_tor_note(&notes)?;
-            let note = aa_wallet.load_tornado_note(&simple_account, note_digest, &password);
+            let note =
+                aa_wallet.load_tornado_note(&simple_account, note_digest, chain_id, &password)?;
             println!("Generating proof...");
             let rt = Runtime::new().unwrap();
             let (user_op, user_op_hash) = rt.block_on(aa_wallet.fill_tornado_withdraw_user_op(
                 &note,
                 to.parse()?,
                 &simple_account,
+                chain_id,
                 &password,
                 tornado_util::TORNADO_ADDRESS.parse()?,
-            ));
+            ))?;
             cli::confirm_user_op(&user_op, &user_op_hash)?;
             let result = rt.block_on(aa_wallet.send_user_op(user_op, &mut simple_account));
-            aa_wallet.delete_tornado_note(&simple_account, note_digest);
+            aa_wallet.delete_tornado_note(&simple_account, chain_id, note_digest)?;
             println!("sent: {}", result);
         } else if i == 4 {
             //Delete account
-            let accounts = SimpleAccount::account_list(&aa_wallet.key_store_path);
+            let accounts = SimpleAccount::account_list(&aa_wallet.key_store_path)?;
             let address = cli::select_aa_account(&accounts)?;
             let password = cli::prompt_password()?;
             let key_dir = aa_wallet
@@ -288,16 +304,16 @@ fn bls_account(aa_wallet: &Erc4337Wallet) -> Result<(), Box<dyn Error>> {
                         None,
                         U256::from_dec_str(&chain_id)?,
                         &password,
-                    );
+                    )?;
                     let account_addr = "0x".to_owned() + &hex::encode(account.address());
                     println!("New account: {}", account_addr);
                 } else if i == 1 {
                     //Send transaction
                     let term = console::Term::stderr();
-                    let accounts = BLSAccount::account_list(&aa_wallet.key_store_path);
+                    let accounts = BLSAccount::account_list(&aa_wallet.key_store_path)?;
                     let address = cli::select_aa_account(&accounts)?;
                     let mut bls_account =
-                        BLSAccount::load_account(&aa_wallet.key_store_path, address);
+                        BLSAccount::load_account(&aa_wallet.key_store_path, address)?;
                     let to = Input::<String>::new()
                         .with_prompt("Send to")
                         .interact_on(&term)?;
@@ -305,53 +321,73 @@ fn bls_account(aa_wallet: &Erc4337Wallet) -> Result<(), Box<dyn Error>> {
                     let amount = Input::<String>::new()
                         .with_prompt("Amount")
                         .interact_on(&term)?;
+                    let chain_id = Input::<String>::new()
+                        .with_prompt("Chain ID")
+                        .interact_on(&term)?;
                     let password = cli::prompt_password()?;
                     let rt = Runtime::new().unwrap();
                     let (user_op, user_op_hash) = rt.block_on(aa_wallet.fill_user_op(
                         &bls_account,
                         to_addr,
                         U256::from_dec_str(&amount)?,
+                        U256::from_dec_str(&chain_id)?,
                         &password,
                         None,
-                    ));
+                    ))?;
                     cli::confirm_user_op(&user_op, &user_op_hash)?;
                     let result = rt.block_on(aa_wallet.send_user_op(user_op, &mut bls_account));
                     println!("sent: {}", result);
                 } else if i == 2 {
                     //Tornado: Deposit
-                    let accounts = BLSAccount::account_list(&aa_wallet.key_store_path);
+                    let term = console::Term::stderr();
+                    let accounts = BLSAccount::account_list(&aa_wallet.key_store_path)?;
                     let address = cli::select_aa_account(&accounts)?;
+                    let chain_id = Input::<String>::new()
+                        .with_prompt("Chain ID")
+                        .interact_on(&term)?;
                     let password = cli::prompt_password()?;
                     let mut bls_account =
-                        BLSAccount::load_account(&aa_wallet.key_store_path, address);
+                        BLSAccount::load_account(&aa_wallet.key_store_path, address)?;
                     let rt = Runtime::new().unwrap();
                     let (user_op, user_op_hash) =
                         rt.block_on(aa_wallet.fill_tornado_deposit_user_op(
                             "0.1",
                             &bls_account,
+                            U256::from_dec_str(&chain_id)?,
                             &password,
                             tornado_util::TORNADO_ADDRESS.parse()?,
-                        ));
+                        ))?;
                     cli::confirm_user_op(&user_op, &user_op_hash)?;
                     let result = rt.block_on(aa_wallet.send_user_op(user_op, &mut bls_account));
                     println!("sent: {}", result);
                 } else if i == 3 {
                     //Tornado: Withdraw
-                    let accounts = BLSAccount::account_list(&aa_wallet.key_store_path);
+                    let term = console::Term::stderr();
+                    let accounts = BLSAccount::account_list(&aa_wallet.key_store_path)?;
                     let address = cli::select_aa_account(&accounts)?;
+                    let chain_id = U256::from_dec_str(
+                        &Input::<String>::new()
+                            .with_prompt("Chain ID")
+                            .interact_on(&term)?,
+                    )?;
                     let password = cli::prompt_password()?;
                     let term = console::Term::stderr();
                     let to = Input::<String>::new()
                         .with_prompt("recipient")
                         .interact_on(&term)?;
                     let mut bls_account =
-                        BLSAccount::load_account(&aa_wallet.key_store_path, address);
-                    let notes = aa_wallet.tornado_note_lists(&bls_account);
+                        BLSAccount::load_account(&aa_wallet.key_store_path, address)?;
+                    let notes = aa_wallet.tornado_note_lists(&bls_account, chain_id)?;
                     if notes.len() == 0 {
                         return Err("No tornado note under this account".into());
                     };
                     let note_digest = cli::select_tor_note(&notes)?;
-                    let note = aa_wallet.load_tornado_note(&bls_account, note_digest, &password);
+                    let note = aa_wallet.load_tornado_note(
+                        &bls_account,
+                        note_digest,
+                        chain_id,
+                        &password,
+                    )?;
                     println!("Generating proof...");
                     let rt = Runtime::new().unwrap();
                     let (user_op, user_op_hash) =
@@ -359,16 +395,17 @@ fn bls_account(aa_wallet: &Erc4337Wallet) -> Result<(), Box<dyn Error>> {
                             &note,
                             to.parse()?,
                             &bls_account,
+                            chain_id,
                             &password,
                             tornado_util::TORNADO_ADDRESS.parse()?,
-                        ));
+                        ))?;
                     cli::confirm_user_op(&user_op, &user_op_hash)?;
                     let result = rt.block_on(aa_wallet.send_user_op(user_op, &mut bls_account));
-                    aa_wallet.delete_tornado_note(&bls_account, note_digest);
+                    aa_wallet.delete_tornado_note(&bls_account, chain_id, note_digest)?;
                     println!("sent: {}", result);
                 } else if i == 4 {
                     //Delete account
-                    let accounts = BLSAccount::account_list(&aa_wallet.key_store_path);
+                    let accounts = BLSAccount::account_list(&aa_wallet.key_store_path)?;
                     let address = cli::select_aa_account(&accounts)?;
                     let password = cli::prompt_password()?;
                     let key_dir = aa_wallet
@@ -402,7 +439,7 @@ fn bls_account(aa_wallet: &Erc4337Wallet) -> Result<(), Box<dyn Error>> {
                     let chain_id = Input::<String>::new()
                         .with_prompt("Chain ID")
                         .interact_on(&term)?;
-                    let accounts = BLSAccount::account_list(&aa_wallet.key_store_path);
+                    let accounts = BLSAccount::account_list(&aa_wallet.key_store_path)?;
                     let selected_indices = cli::select_multiple_aa_account(&accounts)?;
                     if selected_indices.len() < 2 {
                         return Err("Must select at least two owner".into());
@@ -418,7 +455,7 @@ fn bls_account(aa_wallet: &Erc4337Wallet) -> Result<(), Box<dyn Error>> {
                         accounts,
                         None,
                         U256::from_dec_str(&chain_id)?,
-                    );
+                    )?;
                     let account_addr = "0x".to_owned() + &hex::encode(account.address());
                     println!("New account: {}", account_addr);
                 } else if i == 1 {
@@ -427,75 +464,99 @@ fn bls_account(aa_wallet: &Erc4337Wallet) -> Result<(), Box<dyn Error>> {
                     if tx_type == 0 {
                         //eth transaction
                         let term = console::Term::stderr();
-                        let accounts = BLSMultiSigAccount::account_list(&aa_wallet.key_store_path);
+                        let accounts = BLSMultiSigAccount::account_list(&aa_wallet.key_store_path)?;
                         let address = cli::select_aa_account(&accounts)?;
                         let multi_sig_account =
-                            BLSMultiSigAccount::load_account(&aa_wallet.key_store_path, address);
+                            BLSMultiSigAccount::load_account(&aa_wallet.key_store_path, address)?;
                         let to = Input::<String>::new()
                             .with_prompt("Send to")
                             .interact_on(&term)?;
                         let amount = Input::<String>::new()
                             .with_prompt("Amount")
                             .interact_on(&term)?;
+                        let chain_id = U256::from_dec_str(
+                            &Input::<String>::new()
+                                .with_prompt("Chain ID")
+                                .interact_on(&term)?,
+                        )?;
                         let (user_op, user_op_hash) = multi_sig_account.create_user_op(
                             &aa_wallet,
                             Address::from_str(&to)?,
                             U256::from_dec_str(&amount)?,
+                            chain_id,
                             None,
                             None,
-                        );
+                        )?;
                         cli::confirm_user_op(&user_op, &user_op_hash)?;
                         multi_sig_account.store_user_op(
                             &user_op,
                             &user_op_hash,
                             &aa_wallet.key_store_path,
-                        );
+                        )?;
                     } else if tx_type == 1 {
                         //tornado deposit
-                        let accounts = BLSMultiSigAccount::account_list(&aa_wallet.key_store_path);
+                        let term = console::Term::stderr();
+                        let accounts = BLSMultiSigAccount::account_list(&aa_wallet.key_store_path)?;
                         let address = cli::select_aa_account(&accounts)?;
                         let multi_sig_account =
-                            BLSMultiSigAccount::load_account(&aa_wallet.key_store_path, address);
+                            BLSMultiSigAccount::load_account(&aa_wallet.key_store_path, address)?;
+                        let chain_id = U256::from_dec_str(
+                            &Input::<String>::new()
+                                .with_prompt("Chain ID")
+                                .interact_on(&term)?,
+                        )?;
                         let password = cli::prompt_password()?;
                         let tor_deposit = Deposit::new();
-                        let (tx, note_string) = tor_deposit.gen_deposit_tx(
-                            None,
-                            "0.1",
-                            multi_sig_account.chain_id().as_u64(),
-                        );
+                        let (tx, note_string) =
+                            tor_deposit.gen_deposit_tx(None, "0.1", chain_id.as_u64());
                         println!("Note string: {}", note_string);
-                        aa_wallet.save_tornado_notes(&note_string, &multi_sig_account, &password);
+                        aa_wallet.save_tornado_notes(
+                            &note_string,
+                            &multi_sig_account,
+                            chain_id,
+                            &password,
+                        )?;
                         let (user_op, user_op_hash) = multi_sig_account.create_user_op(
                             &aa_wallet,
                             tornado_util::TORNADO_ADDRESS.parse()?,
                             ethers::utils::parse_ether("0.1").unwrap(),
+                            chain_id,
                             None,
                             Some(tx),
-                        );
+                        )?;
                         cli::confirm_user_op(&user_op, &user_op_hash)?;
                         multi_sig_account.store_user_op(
                             &user_op,
                             &user_op_hash,
                             &aa_wallet.key_store_path,
-                        );
+                        )?;
                     } else if tx_type == 2 {
                         //tornado withdraw
-                        let accounts = BLSMultiSigAccount::account_list(&aa_wallet.key_store_path);
+                        let accounts = BLSMultiSigAccount::account_list(&aa_wallet.key_store_path)?;
                         let address = cli::select_aa_account(&accounts)?;
                         let multi_sig_account =
-                            BLSMultiSigAccount::load_account(&aa_wallet.key_store_path, address);
+                            BLSMultiSigAccount::load_account(&aa_wallet.key_store_path, address)?;
                         let password = cli::prompt_password()?;
                         let term = console::Term::stderr();
                         let to = Input::<String>::new()
                             .with_prompt("recipient")
                             .interact_on(&term)?;
-                        let notes = aa_wallet.tornado_note_lists(&multi_sig_account);
+                        let chain_id = U256::from_dec_str(
+                            &Input::<String>::new()
+                                .with_prompt("Chain ID")
+                                .interact_on(&term)?,
+                        )?;
+                        let notes = aa_wallet.tornado_note_lists(&multi_sig_account, chain_id)?;
                         if notes.len() == 0 {
                             return Err("No tornado note under this account".into());
                         };
                         let note_digest = cli::select_tor_note(&notes)?;
-                        let note =
-                            aa_wallet.load_tornado_note(&multi_sig_account, note_digest, &password);
+                        let note = aa_wallet.load_tornado_note(
+                            &multi_sig_account,
+                            note_digest,
+                            chain_id,
+                            &password,
+                        )?;
                         println!("Generating proof...");
                         let rt = Runtime::new().unwrap();
                         let tx = rt.block_on(Deposit::parse_and_withdraw(
@@ -509,46 +570,54 @@ fn bls_account(aa_wallet: &Erc4337Wallet) -> Result<(), Box<dyn Error>> {
                             &aa_wallet,
                             tornado_util::TORNADO_ADDRESS.parse()?,
                             0.into(),
+                            chain_id,
                             None,
                             Some(tx),
-                        );
+                        )?;
                         cli::confirm_user_op(&user_op, &user_op_hash)?;
                         multi_sig_account.store_user_op(
                             &user_op,
                             &user_op_hash,
                             &aa_wallet.key_store_path,
-                        );
+                        )?;
                     }
                 } else if i == 2 {
                     //Confirm transaction
-                    let accounts = BLSMultiSigAccount::account_list(&aa_wallet.key_store_path);
+                    let accounts = BLSMultiSigAccount::account_list(&aa_wallet.key_store_path)?;
                     let address = cli::select_aa_account(&accounts)?;
                     let multi_sig_account =
-                        BLSMultiSigAccount::load_account(&aa_wallet.key_store_path, address);
+                        BLSMultiSigAccount::load_account(&aa_wallet.key_store_path, address)?;
                     let multi_sig_members = multi_sig_account.members_list();
                     let signer_str =
                         cli::select_string_slice(&multi_sig_members, Some("Select a member"))?;
                     let signer = Address::from_str(signer_str)?;
+                    let term = console::Term::stderr();
+                    let chain_id = U256::from_dec_str(
+                        &Input::<String>::new()
+                            .with_prompt("Chain ID")
+                            .interact_on(&term)?,
+                    )?;
                     let password = cli::prompt_password()?;
-                    let user_ops = multi_sig_account.user_op_list(&aa_wallet.key_store_path);
+                    let user_ops = multi_sig_account.user_op_list(&aa_wallet.key_store_path)?;
                     let user_op_hash =
                         cli::select_string_slice(&user_ops, Some("Select a userOp"))?;
                     let user_op =
-                        multi_sig_account.load_user_op(user_op_hash, &aa_wallet.key_store_path);
+                        multi_sig_account.load_user_op(user_op_hash, &aa_wallet.key_store_path)?;
                     multi_sig_account.sign_piece(
                         &aa_wallet.key_store_path,
                         signer,
                         &user_op,
+                        chain_id,
                         &password,
-                    );
+                    )?;
                     println!("{} is confirmed by {}", user_op_hash, signer_str);
                 } else if i == 3 {
                     //Send transaction
-                    let accounts = BLSMultiSigAccount::account_list(&aa_wallet.key_store_path);
+                    let accounts = BLSMultiSigAccount::account_list(&aa_wallet.key_store_path)?;
                     let address = cli::select_aa_account(&accounts)?;
                     let mut multi_sig_account =
-                        BLSMultiSigAccount::load_account(&aa_wallet.key_store_path, address);
-                    let user_ops = multi_sig_account.user_op_list(&aa_wallet.key_store_path);
+                        BLSMultiSigAccount::load_account(&aa_wallet.key_store_path, address)?;
+                    let user_ops = multi_sig_account.user_op_list(&aa_wallet.key_store_path)?;
                     let user_op_hash =
                         cli::select_string_slice(&user_ops, Some("Select a userOp"))?;
 
@@ -567,9 +636,9 @@ fn bls_account(aa_wallet: &Erc4337Wallet) -> Result<(), Box<dyn Error>> {
                     }
 
                     let sig =
-                        multi_sig_account.combine_sig(&aa_wallet.key_store_path, user_op_hash);
+                        multi_sig_account.combine_sig(&aa_wallet.key_store_path, user_op_hash)?;
                     let user_op =
-                        multi_sig_account.load_user_op(user_op_hash, &aa_wallet.key_store_path);
+                        multi_sig_account.load_user_op(user_op_hash, &aa_wallet.key_store_path)?;
                     let user_op = user_op.signature(sig);
 
                     cli::confirm_user_op(&user_op, &user_op_hash)?;

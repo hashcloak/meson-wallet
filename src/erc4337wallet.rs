@@ -1,10 +1,12 @@
 use crate::erc4337_common::{Account, GasQueryResult, SkCipher};
+use crate::error::MesonWalletError;
 use crate::tornado_util::Deposit;
 use crate::user_opertaion::UserOperation;
 use aes::cipher::{KeyIvInit, StreamCipher};
 use base64ct::{Base64, Encoding};
 use ethers::abi::AbiEncode;
 use ethers::prelude::{Address, Bytes, Provider, U256};
+use ethers::providers::Middleware;
 use ethers::utils::keccak256;
 use ethers::utils::{__serde_json::json, hex};
 use rand::{CryptoRng, Rng};
@@ -36,16 +38,19 @@ pub struct Erc4337Wallet {
 }
 
 pub const EXECUTE_SIGNATURE: &str = "b61d27f6";
-//const NODE_RPC_URL: &str = "http://localhost:8545"; //test only, should handle by meson
+const NODE_RPC_URL: &str = "http://localhost:8545"; //test only, should handle by meson
 const BUNDLER_RPC_URL: &str = "http://localhost:4337"; //test only, should handle by meson
 
 impl Erc4337Wallet {
     // create new meson erc4337wallet instance with given wallet config file path
-    pub fn new<P: AsRef<Path>>(wallet_config_path: P) -> Self {
-        let toml_str = fs::read_to_string(wallet_config_path).unwrap();
-        let smart_wallet: Erc4337Wallet = toml::from_str(&toml_str).unwrap();
+    pub fn new<P: AsRef<Path>>(wallet_config_path: P) -> Result<Self, MesonWalletError> {
+        let toml_str = fs::read_to_string(wallet_config_path)?;
+        let smart_wallet: Erc4337Wallet = match toml::from_str(&toml_str) {
+            Ok(w) => w,
+            Err(e) => return Err(MesonWalletError::ConfigFileError(e.to_string())),
+        };
 
-        smart_wallet
+        Ok(smart_wallet)
     }
 
     // create a erc4337 user operation and signed with the given account
@@ -54,13 +59,15 @@ impl Erc4337Wallet {
         account: &P,
         to: Address,
         amount: U256,
+        chain_id: U256,
         password: &str,
         data: Option<Vec<u8>>,
-    ) -> (UserOperation, String) {
+    ) -> Result<(UserOperation, String), MesonWalletError> {
         let mut user_op = UserOperation::new();
+        let deployed = self.deployed(account.address()).await;
         //only include initcode if not yet deployed
-        user_op = if !account.deployed() {
-            let initcode = account.create_init_code(&self.supported_accounts_path);
+        user_op = if !deployed {
+            let initcode = account.create_init_code(&self.supported_accounts_path, chain_id)?;
             user_op.init_code(initcode)
         } else {
             user_op
@@ -69,9 +76,8 @@ impl Erc4337Wallet {
 
         //query nonce only if deployed
         user_op = user_op.nonce(0);
-        if account.deployed() {
-            let addr_str = "0x".to_owned() + &hex::encode(account.address());
-            let nonce = self.query_nonce(addr_str).await;
+        if deployed {
+            let nonce = self.query_nonce(account.address()).await;
             user_op = user_op.nonce(nonce);
         }
 
@@ -103,14 +109,14 @@ impl Erc4337Wallet {
 
         //set signature to empty bytes for signing
         user_op = user_op.signature(Bytes::default());
-        let sig = account.sign(&user_op, password, &self.key_store_path);
+        let sig = account.sign(&user_op, chain_id, password, &self.key_store_path)?;
         let user_op = user_op.signature(sig);
         let user_op_hash = hex::encode(keccak256(AbiEncode::encode((
             user_op.hash(),
             account.entry_point(),
-            account.chain_id(),
+            chain_id,
         ))));
-        (user_op, user_op_hash)
+        Ok((user_op, user_op_hash))
     }
 
     // create a tornado cash deposit user operation and save the tornado-note
@@ -118,25 +124,27 @@ impl Erc4337Wallet {
         &self,
         eth_amount: &str,
         account: &P,
+        chain_id: U256,
         password: &str,
         tornado_addr: Address,
-    ) -> (UserOperation, String) {
+    ) -> Result<(UserOperation, String), MesonWalletError> {
         let tor_deposit = Deposit::new();
-        let (tx, note_string) =
-            tor_deposit.gen_deposit_tx(None, eth_amount, account.chain_id().as_u64());
+        let (tx, note_string) = tor_deposit.gen_deposit_tx(None, eth_amount, chain_id.as_u64());
         println!("Note string: {}", note_string);
-        self.save_tornado_notes(&note_string, account, password);
+        self.save_tornado_notes(&note_string, account, chain_id, password)?;
+        let amount = match ethers::utils::parse_ether(eth_amount) {
+            Ok(a) => a,
+            Err(_) => {
+                return Err(MesonWalletError::MesonWalletError(
+                    "invalid eth amount".into(),
+                ))
+            }
+        };
         let (user_op, hash_str) = self
-            .fill_user_op(
-                account,
-                tornado_addr,
-                ethers::utils::parse_ether(eth_amount).unwrap(),
-                password,
-                Some(tx),
-            )
-            .await;
+            .fill_user_op(account, tornado_addr, amount, chain_id, password, Some(tx))
+            .await?;
 
-        (user_op, hash_str)
+        Ok((user_op, hash_str))
     }
 
     // create a tornado cash withdraw user operation with the given tornado-note
@@ -145,53 +153,77 @@ impl Erc4337Wallet {
         tor_note: &str,
         recipient: Address,
         account: &P,
+        chain_id: U256,
         password: &str,
         tornado_addr: Address,
-    ) -> (UserOperation, String) {
+    ) -> Result<(UserOperation, String), MesonWalletError> {
         let tx = Deposit::parse_and_withdraw(tor_note, recipient, None, None, None).await;
         let (user_op, hash_str) = self
-            .fill_user_op(account, tornado_addr, 0.into(), password, Some(tx))
-            .await;
+            .fill_user_op(
+                account,
+                tornado_addr,
+                0.into(),
+                chain_id,
+                password,
+                Some(tx),
+            )
+            .await?;
 
-        (user_op, hash_str)
+        Ok((user_op, hash_str))
     }
 
     // encrypt & save a given tornado-note
-    pub fn save_tornado_notes<P: Account>(&self, tor_note: &str, account: &P, password: &str) {
+    pub fn save_tornado_notes<P: Account>(
+        &self,
+        tor_note: &str,
+        account: &P,
+        chain_id: U256,
+        password: &str,
+    ) -> Result<(), MesonWalletError> {
         let addr = "0x".to_owned() + &hex::encode(account.address());
         let dir = self
             .key_store_path
             .join("tornado_note")
             .join(addr)
-            .join(account.chain_id().to_string());
-        fs::create_dir_all(&dir).unwrap();
+            .join(chain_id.to_string());
+        fs::create_dir_all(&dir)?;
 
-        let note_digest = std::str::from_utf8(&tor_note.as_bytes()[0..30]).unwrap();
+        let note_digest = match std::str::from_utf8(&tor_note.as_bytes()[0..30]) {
+            Ok(n) => n,
+            Err(_) => {
+                return Err(MesonWalletError::MesonWalletError(
+                    "invalid tornado note".into(),
+                ))
+            }
+        };
         let dir = dir.join(note_digest);
         let mut rng = rand::thread_rng();
         let tor_note: Vec<u8> = tor_note.bytes().collect();
-        Self::encrypt_key(dir, &mut rng, tor_note, password).unwrap();
+        Self::encrypt_key(dir, &mut rng, tor_note, password)?;
+
+        Ok(())
     }
 
     // list the tornado note owned by an account
-    pub fn tornado_note_lists<P: Account>(&self, account: &P) -> Vec<String> {
+    pub fn tornado_note_lists<P: Account>(
+        &self,
+        account: &P,
+        chain_id: U256,
+    ) -> Result<Vec<String>, MesonWalletError> {
         let addr = "0x".to_owned() + &hex::encode(account.address());
         let dir = self
             .key_store_path
             .join("tornado_note")
             .join(addr)
-            .join(account.chain_id().to_string());
-        let files: Vec<String>;
-        match dir.read_dir() {
-            Ok(entry) => {
-                files = entry
-                    .into_iter()
-                    .map(|f| f.unwrap().file_name().to_str().unwrap().to_owned())
-                    .collect::<Vec<String>>()
-            }
+            .join(chain_id.to_string());
+        let files: Result<Vec<String>, MesonWalletError> = match dir.read_dir() {
+            Ok(entry) => entry
+                .into_iter()
+                .map(|f| Ok(f?.file_name().to_str().unwrap().to_owned()))
+                .collect(),
 
-            Err(_) => return vec![],
-        }
+            Err(_) => return Ok(vec![]),
+        };
         return files;
     }
 
@@ -200,39 +232,52 @@ impl Erc4337Wallet {
         &self,
         account: &P,
         note_digest: &str,
+        chain_id: U256,
         password: &str,
-    ) -> String {
+    ) -> Result<String, MesonWalletError> {
         let addr = "0x".to_owned() + &hex::encode(account.address());
         let dir = self
             .key_store_path
             .join("tornado_note")
             .join(addr)
-            .join(account.chain_id().to_string())
+            .join(chain_id.to_string())
             .join(note_digest);
-        let d = Self::decrypt_key(dir, password).unwrap();
-        String::from_utf8(d).unwrap()
+        let d = Self::decrypt_key(dir, password)?;
+        match String::from_utf8(d) {
+            Ok(s) => Ok(s),
+            Err(_) => {
+                return Err(MesonWalletError::MesonWalletError(
+                    "invalid tornado note".into(),
+                ))
+            }
+        }
     }
 
-    pub fn delete_tornado_note<P: Account>(&self, account: &P, note_digest: &str) {
+    pub fn delete_tornado_note<P: Account>(
+        &self,
+        account: &P,
+        chain_id: U256,
+        note_digest: &str,
+    ) -> Result<(), MesonWalletError> {
         let addr = "0x".to_owned() + &hex::encode(account.address());
         let path = self
             .key_store_path
             .join("tornado_note")
             .join(addr)
-            .join(account.chain_id().to_string())
+            .join(chain_id.to_string())
             .join(note_digest);
-        fs::remove_file(path).unwrap();
+        fs::remove_file(path)?;
+        Ok(())
     }
 
     // query erc4337 gas info
-    //test only, should query through meson
+    // test only, should query through meson
     pub async fn query_gas_info<P: Account>(
         &self,
         account: &P,
         user_op: &UserOperation,
     ) -> GasQueryResult {
-        let rpc_url = "http://localhost:4337";
-        let provider = Provider::try_from(rpc_url).unwrap();
+        let provider = Provider::try_from(BUNDLER_RPC_URL).unwrap();
         let query_result: GasQueryResult = provider
             .request(
                 "eth_estimateUserOperationGas",
@@ -243,11 +288,11 @@ impl Erc4337Wallet {
         query_result
     }
 
-    //query the nonce of an smart contract account
-    //test only, should query through meson
-    pub async fn query_nonce(&self, smart_account_addr: String) -> U256 {
-        let rpc_url = "http://localhost:8545";
-        let provider = Provider::try_from(rpc_url).unwrap();
+    // query the nonce of an smart contract account
+    // test only, should query through meson
+    pub async fn query_nonce(&self, smart_account_addr: Address) -> U256 {
+        let provider = Provider::try_from(NODE_RPC_URL).unwrap();
+        let smart_account_addr = "0x".to_owned() + &hex::encode(smart_account_addr);
         let nonce: U256 = provider
             .request(
                 "eth_call",
@@ -260,6 +305,12 @@ impl Erc4337Wallet {
             .unwrap();
 
         nonce
+    }
+
+    pub async fn deployed(&self, smart_account_addr: Address) -> bool {
+        let provider = Provider::try_from(NODE_RPC_URL).unwrap();
+        let code = provider.get_code(smart_account_addr, None).await.unwrap();
+        code != Bytes::default()
     }
 
     // send the user operation with an account
@@ -278,10 +329,6 @@ impl Erc4337Wallet {
             )
             .await
             .unwrap();
-
-        if !account.deployed() {
-            account.set_deployed(true, &self.key_store_path);
-        }
         result
     }
 
@@ -298,7 +345,12 @@ impl Erc4337Wallet {
     }
 
     // AES-256 encrypt account private key
-    pub fn encrypt_key<P, R, S, T>(dir: P, rng: &mut R, mut sk: S, password: T) -> Result<(), ()>
+    pub fn encrypt_key<P, R, S, T>(
+        dir: P,
+        rng: &mut R,
+        mut sk: S,
+        password: T,
+    ) -> Result<(), MesonWalletError>
     where
         P: AsRef<Path>,
         R: Rng + CryptoRng,
@@ -317,7 +369,9 @@ impl Erc4337Wallet {
             DEFAULT_KDF_PARAMS_P,
         )
         .unwrap();
-        scrypt(password.as_ref(), &salt, &scrypt_params, key.as_mut_slice()).unwrap();
+        if let Err(_) = scrypt(password.as_ref(), &salt, &scrypt_params, key.as_mut_slice()) {
+            return Err(MesonWalletError::EncryptError);
+        };
 
         // Encrypt the private key using AES-256-CTR.
         let mut iv = vec![0u8; DEFAULT_IV_SIZE];
@@ -342,24 +396,23 @@ impl Erc4337Wallet {
             salt: salt,
             iv: iv,
         };
-        let str_json = serde_json::to_string(&enc).unwrap();
-        fs::write::<PathBuf, String>(dir.as_ref().to_path_buf(), str_json)
-            .expect("Unable to write file");
+        let str_json = serde_json::to_string(&enc)?;
+        fs::write::<PathBuf, String>(dir.as_ref().to_path_buf(), str_json)?;
         Ok(())
     }
 
     // AES-256 decrypt account private key
-    pub fn decrypt_key<P, S>(dir: P, password: S) -> Result<Vec<u8>, ()>
+    pub fn decrypt_key<P, S>(dir: P, password: S) -> Result<Vec<u8>, MesonWalletError>
     where
         P: AsRef<Path>,
         S: AsRef<[u8]>,
     {
-        let str_json = fs::read_to_string(dir.as_ref()).unwrap();
-        let json_cipher: SkCipher = serde_json::from_str(&str_json).unwrap();
-        let mut cipher = Base64::decode_vec(&json_cipher.cipher).unwrap();
+        let str_json = fs::read_to_string(dir.as_ref())?;
+        let json_cipher: SkCipher = serde_json::from_str(&str_json)?;
+        let mut cipher = Base64::decode_vec(&json_cipher.cipher)?;
         let mac_from_json = json_cipher.mac;
-        let salt = Base64::decode_vec(&json_cipher.salt).unwrap();
-        let iv = Base64::decode_vec(&json_cipher.iv).unwrap();
+        let salt = Base64::decode_vec(&json_cipher.salt)?;
+        let iv = Base64::decode_vec(&json_cipher.iv)?;
 
         //Derive the key
         let mut key = vec![0u8; DEFAULT_KDF_PARAMS_DKLEN as usize];
@@ -369,7 +422,9 @@ impl Erc4337Wallet {
             DEFAULT_KDF_PARAMS_P,
         )
         .unwrap();
-        scrypt(password.as_ref(), &salt, &scrypt_params, key.as_mut_slice()).unwrap();
+        if let Err(_) = scrypt(password.as_ref(), &salt, &scrypt_params, key.as_mut_slice()) {
+            return Err(MesonWalletError::DecryptError);
+        };
 
         //Derive and compare the mac
         let mac = Keccak256::new()
@@ -384,7 +439,7 @@ impl Erc4337Wallet {
         // let sk = PrivateKey::from_bytes(&cipher);
 
         if mac != mac_from_json {
-            return Err(());
+            return Err(MesonWalletError::DecryptError);
         };
         Ok(cipher)
     }
@@ -425,32 +480,52 @@ mod tests {
     #[tokio::test]
     pub async fn test_nonce() {
         let wallet_config_path = PathBuf::from("./configuration/wallet_config.toml");
-        let wallet = Erc4337Wallet::new(wallet_config_path);
+        let wallet = Erc4337Wallet::new(wallet_config_path).unwrap();
         let nonce = wallet
-            .query_nonce("0xca45fe0684c78401e48c853fc911a93ef77a1b31".into())
+            .query_nonce(
+                "0xca45fe0684c78401e48c853fc911a93ef77a1b31"
+                    .parse()
+                    .unwrap(),
+            )
             .await;
         println!("{}", nonce);
+    }
+
+    #[tokio::test]
+    pub async fn test_check_deployed() {
+        let wallet_config_path = PathBuf::from("./configuration/wallet_config.toml");
+        let wallet = Erc4337Wallet::new(wallet_config_path).unwrap();
+        let deployed = wallet
+            .deployed(
+                "0x3df21301e2b4d3da7ec3762f1cb6f8e8e3092230"
+                    .parse()
+                    .unwrap(),
+            )
+            .await;
+        println!("{}", deployed);
     }
 
     use crate::bls::BLSAccount;
     #[tokio::test]
     pub async fn test_bls_send_op() {
         let wallet_config_path = PathBuf::from("./configuration/wallet_config.toml");
-        let wallet = Erc4337Wallet::new(wallet_config_path);
+        let wallet = Erc4337Wallet::new(wallet_config_path).unwrap();
         let path = &wallet.key_store_path;
         let addr_str = "0x11a06b6ac30dc0fedfb7c7b8660f032c67c2a7f7";
-        let mut bls_account = BLSAccount::load_account(&path, addr_str);
+        let mut bls_account = BLSAccount::load_account(&path, addr_str).unwrap();
         let (user_op, ophash) = wallet
             .fill_user_op(
                 &bls_account,
                 "0x0000000000000000000000000000000000013579"
                     .parse()
                     .unwrap(),
-                U256::from_dec_str("111").unwrap(),
+                111.into(),
+                12345.into(),
                 "123456789",
                 None,
             )
-            .await;
+            .await
+            .unwrap();
 
         let result = wallet.send_user_op(user_op, &mut bls_account).await;
         println!("{}", result);
@@ -461,21 +536,23 @@ mod tests {
     #[tokio::test]
     pub async fn test_simple_send_op() {
         let wallet_config_path = PathBuf::from("./configuration/wallet_config.toml");
-        let wallet = Erc4337Wallet::new(wallet_config_path);
+        let wallet = Erc4337Wallet::new(wallet_config_path).unwrap();
         let path = &wallet.key_store_path;
         let addr_str = "0xa9f91eba34bcedb773248c06f4ee99a5f69befd2";
-        let mut account = SimpleAccount::load_account(&path, addr_str);
+        let mut account = SimpleAccount::load_account(&path, addr_str).unwrap();
         let (user_op, ophash) = wallet
             .fill_user_op(
                 &account,
                 "0x0000000000000000000000000000000000028825"
                     .parse()
                     .unwrap(),
-                U256::from_dec_str("1").unwrap(),
+                1.into(),
+                12345.into(),
                 "123456789",
                 None,
             )
-            .await;
+            .await
+            .unwrap();
 
         let result = wallet.send_user_op(user_op, &mut account).await;
         println!("{}", result);
@@ -488,18 +565,20 @@ mod tests {
     //for some version of bundler, needs to disable gas query to endable tornado cash
     pub async fn test_g_tornado_deposit() {
         let wallet_config_path = PathBuf::from("./configuration/wallet_config.toml");
-        let wallet = Erc4337Wallet::new(wallet_config_path);
+        let wallet = Erc4337Wallet::new(wallet_config_path).unwrap();
         let path = &wallet.key_store_path;
         let addr_str = "0x11a06b6ac30dc0fedfb7c7b8660f032c67c2a7f7";
-        let mut account = BLSAccount::load_account(&path, addr_str);
+        let mut account = BLSAccount::load_account(&path, addr_str).unwrap();
         let (user_op, _) = wallet
             .fill_tornado_deposit_user_op(
                 "0.1",
                 &account,
+                12345.into(),
                 "123456789",
                 tornado_util::TORNADO_ADDRESS.parse().unwrap(),
             )
-            .await;
+            .await
+            .unwrap();
         let result = wallet.send_user_op(user_op, &mut account).await;
         println!("{}", result);
     }
@@ -510,19 +589,20 @@ mod tests {
     //for some version of bundler, needs to disable gas query to endable tornado cash
     pub async fn test_g_tornado_withdraw() {
         let wallet_config_path = PathBuf::from("./configuration/wallet_config.toml");
-        let wallet = Erc4337Wallet::new(wallet_config_path);
+        let wallet = Erc4337Wallet::new(wallet_config_path).unwrap();
         let path = &wallet.key_store_path;
         let addr_str = "0x3df21301e2b4d3da7ec3762f1cb6f8e8e3092230";
-        let mut account = BLSAccount::load_account(&path, addr_str);
+        let mut account = BLSAccount::load_account(&path, addr_str).unwrap();
         let (user_op, _) = wallet
         .fill_tornado_withdraw_user_op(
             "tornado-eth-0.1-12345-0x989c9819812d7c4d54914bfe40760fe35cc173d3a628d215838ebc9938d72447809643ee7698bbd6408887000d26c10860fc3c42d8ee39e11d0385e01229",
              "0x1f0bdb0533b9ab79c891e65ac3ad3df4cd164b50".parse().unwrap(),
                &account,
+               12345.into(),
                "123456789",
                tornado_util::TORNADO_ADDRESS.parse().unwrap(),
             )
-            .await;
+            .await.unwrap();
         let result = wallet.send_user_op(user_op, &mut account).await;
         println!("{}", result);
     }

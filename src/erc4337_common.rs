@@ -1,3 +1,4 @@
+use crate::error::MesonWalletError;
 use crate::user_opertaion::UserOperation;
 use ethers::prelude::{Address, U256};
 use serde::{Deserialize, Serialize};
@@ -54,15 +55,20 @@ pub struct SkCipher {
 // trait for an erc4337 account, used by erc4337 wallet
 pub trait Account {
     // create the init code for first time deployment
-    fn create_init_code<P: AsRef<Path>>(&self, supported_accounts_path: P) -> Vec<u8>;
+    fn create_init_code<P: AsRef<Path>>(
+        &self,
+        supported_accounts_path: P,
+        chain_id: U256,
+    ) -> Result<Vec<u8>, MesonWalletError>;
 
     // sign a given user_op
     fn sign<P: AsRef<Path>>(
         &self,
         user_op: &UserOperation,
+        chain_id: U256,
         password: &str,
         key_store_path: P,
-    ) -> Vec<u8>;
+    ) -> Result<Vec<u8>, MesonWalletError>;
 
     // return the address of the smart contract account
     fn address(&self) -> Address;
@@ -70,15 +76,6 @@ pub trait Account {
     // return the entry point used by the smart contract account
     fn entry_point(&self) -> Address;
 
-    // return chain id
-    fn chain_id(&self) -> U256; //todo: does account need to hold chain_id?
-
     // return the salt used in Create2 to deploy the account
     fn salt(&self) -> U256;
-
-    // return wether the account has deployed
-    fn deployed(&self) -> bool; //todo: does account need to hold deployment status? (Consider checking deployment status every time)
-
-    // set the deployment status
-    fn set_deployed<P: AsRef<Path>>(&mut self, status: bool, key_store_path: P); //update and save deployed status
 }

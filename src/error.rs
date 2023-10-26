@@ -83,6 +83,29 @@ impl From<MesonError> for ProviderError {
 
 #[derive(Error, Debug)]
 pub enum MesonWalletError {
-    #[error("MesonWalletError")]
+    #[error("MesonWalletError: {0}")]
     MesonWalletError(String),
+    #[error("SigningError: {0}")]
+    SigningError(String),
+    #[error("DecryptError")]
+    DecryptError,
+    #[error("EncryptError")]
+    EncryptError,
+    #[error("IOError: {source}")]
+    IOError {
+        #[from]
+        source: std::io::Error,
+    },
+    #[error("SerdeError: {source}")]
+    SerdeError {
+        #[from]
+        source: serde_json::Error,
+    },
+    #[error("ConfigFileError: {0}")]
+    ConfigFileError(String),
+    #[error("Base64 error {source}")]
+    Base64Error {
+        #[from]
+        source: base64ct::Error,
+    },
 }

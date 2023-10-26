@@ -17,8 +17,8 @@ pub mod bindings;
 pub mod meson_provider;
 
 // meson plugin command
-pub const ETH_QUERY: u8 = 0x10;
-pub const POST_TRANSACTION: u8 = 0x00;
+//pub const ETH_QUERY: u8 = 0x10;
+//pub const POST_TRANSACTION: u8 = 0x00;
 pub const DIRECT_POST: u8 = 0x01;
 
 const MESON_SERVICE: &str = "meson";
