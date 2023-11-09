@@ -215,20 +215,6 @@ impl BLSAccount {
         };
         Ok(a.to_string())
     }
-
-    // todo: move it to account trait
-    fn delete_account<P: AsRef<Path>>(
-        &self,
-        key_store_path: P,
-        _account: Address, //account to initiate the deletion, only used in multisig
-        password: &str,
-    ) {
-        let key_dir = self.get_key_path(&key_store_path);
-        Erc4337Wallet::decrypt_key(key_dir, password).unwrap();
-        let addr_str = "0x".to_owned() + &hex::encode(self.address);
-        let account_path = key_store_path.as_ref().join("bls").join(addr_str);
-        fs::remove_dir_all(&account_path).unwrap();
-    }
 }
 
 // implement account trait for bls account
@@ -293,6 +279,21 @@ impl Account for BLSAccount {
 
     fn salt(&self) -> U256 {
         self.salt
+    }
+
+    fn delete_account<P: AsRef<Path>>(
+        &self,
+        key_store_path: P,
+        _account: Address, //account to initiate the deletion, only used in multisig
+        password: &str,
+    ) -> Result<(), MesonWalletError> {
+        let key_dir = self.get_key_path(&key_store_path);
+        Erc4337Wallet::decrypt_key(key_dir, password)?;
+        let addr_str = "0x".to_owned() + &hex::encode(self.address);
+        let account_path = key_store_path.as_ref().join("bls").join(addr_str);
+        fs::remove_dir_all(&account_path)?;
+
+        Ok(())
     }
 }
 

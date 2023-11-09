@@ -62,6 +62,7 @@ pub fn select_multisig_func() -> Result<u8, io::Error> {
         "Create transaction",
         "Confirm transaction",
         "Send transaction",
+        "Delete account",
         "Back",
     ];
     let selection = dialoguer::Select::new()
@@ -130,7 +131,7 @@ pub fn prompt_password() -> Result<String, io::Error> {
     Ok(password)
 }
 
-// select a eoa account wallet
+// select an eoa account wallet
 pub fn select_account(accounts: &[Account]) -> Result<&Account, io::Error> {
     let selection = dialoguer::Select::new()
         .with_prompt("Select an account")
@@ -144,7 +145,7 @@ pub fn select_account(accounts: &[Account]) -> Result<&Account, io::Error> {
     }
 }
 
-// select a eoa account wallet
+// select an aa account wallet
 pub fn select_aa_account(accounts: &[String]) -> Result<&str, io::Error> {
     let selection = dialoguer::Select::new()
         .with_prompt("Select an account")

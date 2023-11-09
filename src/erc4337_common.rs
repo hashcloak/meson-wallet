@@ -78,4 +78,12 @@ pub trait Account {
 
     // return the salt used in Create2 to deploy the account
     fn salt(&self) -> U256;
+
+    // delete an account
+    fn delete_account<P: AsRef<Path>>(
+        &self,
+        key_store_path: P,
+        _account: Address, //account to initiate the deletion, only used in multisig
+        password: &str,
+    ) -> Result<(), MesonWalletError>;
 }

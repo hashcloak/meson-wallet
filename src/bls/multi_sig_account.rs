@@ -426,6 +426,34 @@ impl Account for BLSMultiSigAccount {
     fn salt(&self) -> U256 {
         self.salt
     }
+
+    // todo: currently one bls accout can delete a multisig account; consider required all bls account to confirm
+    fn delete_account<P: AsRef<Path>>(
+        &self,
+        key_store_path: P,
+        _account: Address, //account to initiate the deletion, only used in multisig
+        password: &str,
+    ) -> Result<(), MesonWalletError> {
+        let addr_str = "0x".to_string() + &hex::encode(self.address);
+        let account_path = key_store_path.as_ref().join("bls_multisig").join(addr_str);
+        // check if _account contains in the account list
+        if !self.accounts_list.contains(&_account) {
+            return Err(MesonWalletError::MesonWalletError(
+                "invalid bls account".into(),
+            ));
+        }
+        // check if the password match the bls account
+        let bls_account = BLSAccount::load_account(
+            &key_store_path,
+            &("0x".to_string() + &hex::encode(_account)),
+        )?;
+
+        let bls_account_path = bls_account.get_key_path(&key_store_path);
+        Erc4337Wallet::decrypt_key(bls_account_path, password)?;
+        fs::remove_dir_all(&account_path)?;
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]

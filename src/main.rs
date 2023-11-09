@@ -249,22 +249,10 @@ fn simple_account(aa_wallet: &Erc4337Wallet) -> Result<(), Box<dyn Error>> {
             let accounts = SimpleAccount::account_list(&aa_wallet.key_store_path)?;
             let address = cli::select_aa_account(&accounts)?;
             let password = cli::prompt_password()?;
-            let key_dir = aa_wallet
-                .key_store_path
-                .join("simple_account")
-                .join(address)
-                .join("key");
-            if let Err(_) = Erc4337Wallet::decrypt_key(key_dir, &password) {
-                return Err("wrong password".into());
-            };
+            let account = SimpleAccount::load_account(&aa_wallet.key_store_path, address)?;
             let prompt = "Delete account ".to_string() + address + "?";
             if Confirm::new().with_prompt(prompt).interact()? {
-                fs::remove_dir_all(
-                    aa_wallet
-                        .key_store_path
-                        .join("simple_account")
-                        .join(address),
-                )?;
+                account.delete_account(&aa_wallet.key_store_path, Address::zero(), &password)?;
                 println!("Account deleted");
             } else {
                 return Err("".into());
@@ -408,17 +396,14 @@ fn bls_account(aa_wallet: &Erc4337Wallet) -> Result<(), Box<dyn Error>> {
                     let accounts = BLSAccount::account_list(&aa_wallet.key_store_path)?;
                     let address = cli::select_aa_account(&accounts)?;
                     let password = cli::prompt_password()?;
-                    let key_dir = aa_wallet
-                        .key_store_path
-                        .join("bls")
-                        .join(address)
-                        .join("key");
-                    if let Err(_) = Erc4337Wallet::decrypt_key(key_dir, &password) {
-                        return Err("wrong password".into());
-                    };
+                    let account = BLSAccount::load_account(&aa_wallet.key_store_path, address)?;
                     let prompt = "Delete account ".to_string() + address + "?";
                     if Confirm::new().with_prompt(prompt).interact()? {
-                        fs::remove_dir_all(aa_wallet.key_store_path.join("bls").join(address))?;
+                        account.delete_account(
+                            &aa_wallet.key_store_path,
+                            Address::zero(),
+                            &password,
+                        )?;
                         println!("Account deleted");
                     } else {
                         return Err("".into());
@@ -646,6 +631,35 @@ fn bls_account(aa_wallet: &Erc4337Wallet) -> Result<(), Box<dyn Error>> {
                     let result =
                         rt.block_on(aa_wallet.send_user_op(user_op, &mut multi_sig_account));
                     println!("sent: {}", result);
+                } else if i == 4 {
+                    // Delete account
+
+                    // select account to delete
+                    let multisig_accounts =
+                        BLSMultiSigAccount::account_list(&aa_wallet.key_store_path)?;
+                    let address = cli::select_aa_account(&multisig_accounts)?;
+
+                    // select the member to execute the deletion
+                    let multisig_account =
+                        BLSMultiSigAccount::load_account(&aa_wallet.key_store_path, address)?;
+                    let bls_accounts = multisig_account.members_list();
+                    let signer_str = cli::select_string_slice(
+                        &bls_accounts,
+                        Some("Select the member to execute the deletion"),
+                    )?;
+                    let password = cli::prompt_password()?;
+
+                    let prompt = "Delete account ".to_string() + address + "?";
+                    if Confirm::new().with_prompt(prompt).interact()? {
+                        multisig_account.delete_account(
+                            &aa_wallet.key_store_path,
+                            Address::from_str(signer_str)?,
+                            &password,
+                        )?;
+                        println!("Account deleted");
+                    } else {
+                        return Err("".into());
+                    }
                 }
             }
         }
