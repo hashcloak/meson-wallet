@@ -24,8 +24,11 @@ use std::path::Path;
 // gas query result return from Meson
 #[derive(Debug, Serialize, Deserialize)]
 pub struct GasQueryResult {
+    #[serde(rename = "preVerificationGas")]
     pub pre_verification_gas: u128,
+    #[serde(rename = "verificationGas")]
     pub verification_gas: u128,
+    #[serde(rename = "callGasLimit")]
     pub call_gas_limit: u128,
 }
 

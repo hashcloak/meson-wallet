@@ -29,6 +29,7 @@ pub struct BLSAccount {
     public_key: BLSSolPublicKey, // public key stored on chain
     entry_point: Address,
     salt: U256,
+    chain_id: U256,
 }
 
 impl BLSAccount {
@@ -63,11 +64,12 @@ impl BLSAccount {
         fs::create_dir_all(&dir)?;
 
         let account = BLSAccount {
-            address: address,
-            aggregator: aggregator,
+            address,
+            aggregator,
             public_key: pk_sol,
-            entry_point: entry_point,
-            salt: salt,
+            entry_point,
+            salt,
+            chain_id,
         };
 
         //encrypt and store bls private key

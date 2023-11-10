@@ -27,6 +27,7 @@ pub struct SimpleAccount {
     owner: Address,
     entry_point: Address,
     salt: U256,
+    chain_id: U256,
 }
 
 impl SimpleAccount {
@@ -65,8 +66,9 @@ impl SimpleAccount {
         let account = SimpleAccount {
             address: account_addr,
             owner: owner_addr,
-            entry_point: entry_point,
-            salt: salt,
+            entry_point,
+            salt,
+            chain_id,
         };
 
         //encrypt and store bls private key

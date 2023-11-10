@@ -109,7 +109,8 @@ impl Erc4337Wallet {
 
         //set signature to empty bytes for signing
         user_op = user_op.signature(Bytes::default());
-        let sig = account.sign(&user_op, chain_id, password, &self.key_store_path)?;
+        let key_store_path = self.key_store_path.join(chain_id.to_string());
+        let sig = account.sign(&user_op, chain_id, password, &key_store_path)?;
         let user_op = user_op.signature(sig);
         let user_op_hash = hex::encode(keccak256(AbiEncode::encode((
             user_op.hash(),

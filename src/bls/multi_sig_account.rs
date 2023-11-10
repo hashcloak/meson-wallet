@@ -27,6 +27,7 @@ pub struct BLSMultiSigAccount {
     accounts_list: Vec<Address>,     // accounts used in the aggregated public key
     entry_point: Address,
     salt: U256,
+    chain_id: U256,
 }
 
 impl BLSMultiSigAccount {
@@ -77,6 +78,7 @@ impl BLSMultiSigAccount {
             accounts_list,
             entry_point,
             salt,
+            chain_id,
         };
 
         //store account settings
