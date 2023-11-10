@@ -9,7 +9,6 @@ use ethers::utils::hex;
 use simple_account::SimpleAccount;
 use std::env;
 use std::error::Error;
-use std::fs;
 use std::str::FromStr;
 use wallet::MesonWallet;
 mod bls;

@@ -1,4 +1,3 @@
-#![allow(non_snake_case)]
 use ethers::abi::AbiEncode;
 use ethers::abi::Address;
 use ethers::contract::{EthAbiCodec, EthAbiType};
@@ -18,28 +17,36 @@ pub struct UserOperation {
     pub nonce: U256,
 
     // The initCode of the account (needed if and only if the account is not yet on-chain and needs to be created)
-    pub initCode: Bytes,
+    #[serde(rename = "initCode")]
+    pub init_code: Bytes,
 
     // The data to pass to the sender during the main execution call
-    pub callData: Bytes,
+    #[serde(rename = "callData")]
+    pub call_data: Bytes,
 
     // The amount of gas to allocate the main execution call
-    pub callGasLimit: U256,
+    #[serde(rename = "callGasLimit")]
+    pub call_gas_limit: U256,
 
     // The amount of gas to allocate for the verification step
-    pub verificationGasLimit: U256,
+    #[serde(rename = "verificationGasLimit")]
+    pub verification_gas_limit: U256,
 
     // The amount of gas to pay for to compensate the bundler for pre-verification execution and calldata
-    pub preVerificationGas: U256,
+    #[serde(rename = "preVerificationGas")]
+    pub pre_verification_gas: U256,
 
     // Maximum fee per gas (similar to EIP-1559 max_fee_per_gas)
-    pub maxFeePerGas: U256,
+    #[serde(rename = "maxFeePerGas")]
+    pub max_fee_per_gas: U256,
 
     // Maximum priority fee per gas (similar to EIP-1559 max_priority_fee_per_gas)
-    pub maxPriorityFeePerGas: U256,
+    #[serde(rename = "maxPriorityFeePerGas")]
+    pub max_priority_fee_per_gas: U256,
 
     // Address of paymaster sponsoring the transaction, followed by extra data to send to the paymaster (empty for self-sponsored transaction)
-    pub paymasterAndData: Bytes,
+    #[serde(rename = "paymasterAndData")]
+    pub paymaster_and_data: Bytes,
 
     // Data passed into the account along with the nonce during the verification step
     pub signature: Bytes,
@@ -68,49 +75,49 @@ impl UserOperation {
     // Sets the `init_code` field in the transaction to the provided value
     #[must_use]
     pub fn init_code<T: Into<Bytes>>(mut self, init_code: T) -> Self {
-        self.initCode = init_code.into();
+        self.init_code = init_code.into();
         self
     }
 
     // Sets the `call_data` field in the transaction to the provided value
     #[must_use]
     pub fn call_data<T: Into<Bytes>>(mut self, call_data: T) -> Self {
-        self.callData = call_data.into();
+        self.call_data = call_data.into();
         self
     }
 
-    // Sets the `call_gas_imit` field in the transaction to the provided value
+    // Sets the `call_gas_limit` field in the transaction to the provided value
     #[must_use]
-    pub fn call_gas_imit<T: Into<U256>>(mut self, call_gas_imit: T) -> Self {
-        self.callGasLimit = call_gas_imit.into();
+    pub fn call_gas_limit<T: Into<U256>>(mut self, call_gas_limit: T) -> Self {
+        self.call_gas_limit = call_gas_limit.into();
         self
     }
 
     // Sets the `verification_gas_limit` field in the transaction to the provided value
     #[must_use]
     pub fn verification_gas_limit<T: Into<U256>>(mut self, verification_gas_limit: T) -> Self {
-        self.verificationGasLimit = verification_gas_limit.into();
+        self.verification_gas_limit = verification_gas_limit.into();
         self
     }
 
     // Sets the `pre_verification_gas` field in the transaction to the provided value
     #[must_use]
     pub fn pre_verification_gas<T: Into<U256>>(mut self, pre_verification_gas: T) -> Self {
-        self.preVerificationGas = pre_verification_gas.into();
+        self.pre_verification_gas = pre_verification_gas.into();
         self
     }
 
     // Sets the `max_fee_per_gas` field in the transaction to the provided value
     #[must_use]
     pub fn max_fee_per_gas<T: Into<U256>>(mut self, max_fee_per_gas: T) -> Self {
-        self.maxFeePerGas = max_fee_per_gas.into();
+        self.max_fee_per_gas = max_fee_per_gas.into();
         self
     }
 
     // Sets the `max_priority_fee_per_gas` field in the transaction to the provided value
     #[must_use]
     pub fn max_priority_fee_per_gas<T: Into<U256>>(mut self, max_priority_fee_per_gas: T) -> Self {
-        self.maxPriorityFeePerGas = max_priority_fee_per_gas.into();
+        self.max_priority_fee_per_gas = max_priority_fee_per_gas.into();
         self
     }
 
@@ -119,7 +126,7 @@ impl UserOperation {
     #[allow(dead_code)]
     #[must_use]
     pub fn paymaster_and_data<T: Into<Bytes>>(mut self, paymaster_and_data: T) -> Self {
-        self.paymasterAndData = paymaster_and_data.into();
+        self.paymaster_and_data = paymaster_and_data.into();
         self
     }
 
@@ -145,22 +152,22 @@ impl UserOperation {
 
     // return the function signature called in wallet contract
     pub fn get_function_signature(&self) -> String {
-        "0x".to_string() + &hex::encode(&self.callData[..4])
+        "0x".to_string() + &hex::encode(&self.call_data[..4])
     }
 
     // return the receipient of a userOp
     pub fn get_receipient(&self) -> String {
-        "0x".to_string() + &hex::encode(&self.callData[16..36])
+        "0x".to_string() + &hex::encode(&self.call_data[16..36])
     }
 
     // return the amount of a userOp
     pub fn get_amount(&self) -> U256 {
-        U256::from_big_endian(&self.callData[36..68])
+        U256::from_big_endian(&self.call_data[36..68])
     }
 
     // return the data of a userOp
     pub fn get_data(&self) -> String {
-        hex::encode(&self.callData[68..])
+        hex::encode(&self.call_data[68..])
     }
 }
 
@@ -169,14 +176,14 @@ impl UserOperation {
 pub struct UserOperationUnsigned {
     pub sender: Address,
     pub nonce: U256,
-    pub initCode: H256,
-    pub callData: H256,
-    pub callGasLimit: U256,
-    pub verificationGasLimit: U256,
-    pub preVerificationGas: U256,
-    pub maxFeePerGas: U256,
-    pub maxPriorityFeePerGas: U256,
-    pub paymasterAndData: H256,
+    pub init_code: H256,
+    pub call_data: H256,
+    pub call_gas_limit: U256,
+    pub verification_gas_limit: U256,
+    pub pre_verification_gas: U256,
+    pub max_fee_per_gas: U256,
+    pub max_priority_fee_per_gas: U256,
+    pub paymaster_and_data: H256,
 }
 
 impl From<UserOperation> for UserOperationUnsigned {
@@ -184,14 +191,14 @@ impl From<UserOperation> for UserOperationUnsigned {
         Self {
             sender: value.sender,
             nonce: value.nonce,
-            initCode: keccak256(value.initCode.deref()).into(),
-            callData: keccak256(value.callData.deref()).into(),
-            callGasLimit: value.callGasLimit,
-            verificationGasLimit: value.verificationGasLimit,
-            preVerificationGas: value.preVerificationGas,
-            maxFeePerGas: value.maxFeePerGas,
-            maxPriorityFeePerGas: value.maxPriorityFeePerGas,
-            paymasterAndData: keccak256(value.paymasterAndData.deref()).into(),
+            init_code: keccak256(value.init_code.deref()).into(),
+            call_data: keccak256(value.call_data.deref()).into(),
+            call_gas_limit: value.call_gas_limit,
+            verification_gas_limit: value.verification_gas_limit,
+            pre_verification_gas: value.pre_verification_gas,
+            max_fee_per_gas: value.max_fee_per_gas,
+            max_priority_fee_per_gas: value.max_priority_fee_per_gas,
+            paymaster_and_data: keccak256(value.paymaster_and_data.deref()).into(),
         }
     }
 }
@@ -208,7 +215,7 @@ mod tests {
             .sender(Address::from_str("0x85ef6db74c13b3bfa12a784702418e5aafad73eb").unwrap())
             .nonce(0i32)
             .call_data(Bytes::from_str("0x23").unwrap())
-            .call_gas_imit(999i32)
+            .call_gas_limit(999i32)
             .verification_gas_limit(999i32)
             .pre_verification_gas(999i32)
             .max_fee_per_gas(999i32)

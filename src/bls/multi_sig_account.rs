@@ -210,7 +210,7 @@ impl BLSMultiSigAccount {
 
         //shoud set the gas price from gas_info (current stackup version doesn't work)
         user_op = user_op
-            .call_gas_imit(1500000)
+            .call_gas_limit(1500000)
             .verification_gas_limit(1500000)
             .pre_verification_gas(1500000)
             .max_fee_per_gas(100)
@@ -575,8 +575,14 @@ mod test {
             .unwrap();
         assert!(bls_multisig_account.verify(&user_op, 12345.into(), &sig));
 
-        bls_account1.delete_account(&wallet.key_store_path, Address::zero(), "123456789");
-        bls_account2.delete_account(&wallet.key_store_path, Address::zero(), "123456789");
-        bls_account3.delete_account(&wallet.key_store_path, Address::zero(), "123456789");
+        bls_account1
+            .delete_account(&wallet.key_store_path, Address::zero(), "123456789")
+            .unwrap();
+        bls_account2
+            .delete_account(&wallet.key_store_path, Address::zero(), "123456789")
+            .unwrap();
+        bls_account3
+            .delete_account(&wallet.key_store_path, Address::zero(), "123456789")
+            .unwrap();
     }
 }

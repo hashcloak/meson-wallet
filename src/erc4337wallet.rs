@@ -101,7 +101,7 @@ impl Erc4337Wallet {
 
         //shoud set the gas price from gas_info (current stackup version doesn't work)
         user_op = user_op
-            .call_gas_imit(1500000)
+            .call_gas_limit(1500000)
             .verification_gas_limit(1500000)
             .pre_verification_gas(1500000)
             .max_fee_per_gas(100)

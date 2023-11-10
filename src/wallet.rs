@@ -26,7 +26,7 @@ use std::str::FromStr;
 
 type Aes128Ctr = ctr::Ctr64LE<aes::Aes128>;
 
-const MESON_SERVICE: &str = "meson";
+// const MESON_SERVICE: &str = "meson";
 const DEFAULT_KEY_SIZE: usize = 32usize;
 const DEFAULT_IV_SIZE: usize = 16usize;
 const DEFAULT_KDF_PARAMS_DKLEN: u8 = 32u8;
@@ -85,15 +85,15 @@ impl<F: FnMut()> Drop for ScopeCall<F> {
     }
 }
 
-macro_rules! defer {
-    ($e:expr) => {
-        let _scope_call = ScopeCall {
-            c: || -> () {
-                $e;
-            },
-        };
-    };
-}
+// macro_rules! defer {
+//     ($e:expr) => {
+//         let _scope_call = ScopeCall {
+//             c: || -> () {
+//                 $e;
+//             },
+//         };
+//     };
+// }
 
 impl MesonWallet {
     pub fn new<P: AsRef<Path>>(wallet_config_path: P) -> Self {

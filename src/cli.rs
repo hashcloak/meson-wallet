@@ -279,12 +279,12 @@ pub fn confirm_tx(tx: &TypedTransaction) -> Result<(), io::Error> {
 pub fn confirm_user_op(user_op: &UserOperation, user_op_hash: &str) -> Result<(), io::Error> {
     let sender = "0x".to_owned() + &hex::encode(user_op.sender.as_bytes());
     let nonce = user_op.nonce.to_string();
-    let call_gas_limit = user_op.callGasLimit.to_string();
-    let verification_gas_limit = user_op.verificationGasLimit.to_string();
-    let pre_verfication_gas = user_op.preVerificationGas.to_string();
-    let max_fee_per_gas = user_op.maxFeePerGas.to_string();
-    let max_priority_fee_per_gas = user_op.maxPriorityFeePerGas.to_string();
-    let data = user_op.paymasterAndData.to_string();
+    let call_gas_limit = user_op.call_gas_limit.to_string();
+    let verification_gas_limit = user_op.verification_gas_limit.to_string();
+    let pre_verification_gas = user_op.pre_verification_gas.to_string();
+    let max_fee_per_gas = user_op.max_fee_per_gas.to_string();
+    let max_priority_fee_per_gas = user_op.max_priority_fee_per_gas.to_string();
+    let data = user_op.paymaster_and_data.to_string();
     let to = user_op.get_receipient();
     let amount = user_op.get_amount();
     _ = user_op.get_data();
@@ -298,7 +298,7 @@ pub fn confirm_user_op(user_op: &UserOperation, user_op_hash: &str) -> Result<()
     println!("nonce: {}", nonce);
     println!("call gas limit: {}", call_gas_limit);
     println!("verification gas limit: {}", verification_gas_limit);
-    println!("pre verfication gas: {}", pre_verfication_gas);
+    println!("pre verfication gas: {}", pre_verification_gas);
     println!("max fee per gas: {}", max_fee_per_gas);
     println!("max priority fee per gas: {}", max_priority_fee_per_gas);
     println!("paymaster and data: {}", data);
