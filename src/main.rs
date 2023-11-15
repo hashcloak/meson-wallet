@@ -1,28 +1,19 @@
-use crate::bls::{multi_sig_account::BLSMultiSigAccount, BLSAccount};
-use crate::erc4337_common::Account;
-use crate::tornado_util::Deposit;
 use dialoguer::console::Term;
 use dialoguer::{console, Confirm, Input};
-use erc4337wallet::Erc4337Wallet;
 use ethers::types::{Address, U256};
 use ethers::utils::hex;
-use simple_account::SimpleAccount;
+use meson_wallet::bls::{multi_sig_account::BLSMultiSigAccount, BLSAccount};
+use meson_wallet::cli;
+use meson_wallet::erc4337_common::Account;
+use meson_wallet::erc4337wallet::Erc4337Wallet;
+use meson_wallet::simple_account::SimpleAccount;
+use meson_wallet::tornado_util;
+use meson_wallet::tornado_util::Deposit;
+use meson_wallet::wallet::MesonWallet;
 use std::env;
 use std::error::Error;
 use std::str::FromStr;
-use wallet::MesonWallet;
-mod bls;
-mod cli;
-mod erc4337_common;
 use tokio::runtime::Runtime;
-mod erc4337wallet;
-mod error;
-mod json_rpc;
-mod meson_util;
-mod simple_account;
-mod tornado_util;
-mod user_opertaion;
-mod wallet;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
