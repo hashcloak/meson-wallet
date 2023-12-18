@@ -41,7 +41,7 @@ ark-snark = "0.4.0"
 ark-serialize = "0.4.2"
 ark-ec = "0.4.2"
 ark-ff = "0.4.2"
-async-trait = "0.1.74"
+async-trait = "0.1"
 
 [build-dependencies]
 bindgen = "0.53.1"
