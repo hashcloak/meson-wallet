@@ -22,7 +22,6 @@ use std::ffi::{c_void, CString};
 use std::fmt;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::str::FromStr;
 
 type Aes128Ctr = ctr::Ctr64LE<aes::Aes128>;
 
@@ -43,8 +42,8 @@ pub struct MesonWallet {
 }
 
 #[derive(serde::Deserialize, Debug)]
-struct chainInfo {
-    ticker: String,
+pub struct chainInfo {
+    pub ticker: String,
     //endpoint: String,
 }
 
@@ -58,8 +57,8 @@ struct JsonMnemonic {
 }
 
 pub struct Account {
-    addr: String,
-    path: PathBuf,
+    pub addr: String,
+    pub path: PathBuf,
 }
 
 impl fmt::Display for Account {
@@ -103,61 +102,28 @@ impl MesonWallet {
         meson_wallet
     }
 
-    //create random mnemonic
-    pub fn new_mnemonic(&self) -> Result<(), Box<dyn Error>> {
+    pub fn gen_mnemonic() -> Result<String, MnemonicError> {
         let mut rng = rand::thread_rng();
-        let phrase = Mnemonic::<English>::new_with_count(&mut rng, 24)?;
-        let term = console::Term::stderr();
-        term.write_line(&phrase.to_phrase().unwrap())?;
-        if Confirm::new()
-            .with_prompt("All non-imported accounts will be cleared, continue?")
-            .interact_on(&term)?
-        {
-            let _ = term.clear_last_lines(2);
-        } else {
-            let _ = term.clear_last_lines(2);
-            return Err(Box::new(MesonError::MesonError("".into())));
-        }
+        let phrase = Mnemonic::<English>::new_with_count(&mut rng, 12)?;
+        Ok(phrase.to_phrase()?)
+    }
+
+    pub fn save_mnemonic(&self, mnemonic: &str, password: &str) -> Result<(), MnemonicError> {
+        let mut rng = rand::thread_rng();
         let ketstore_dir = self.key_store_path.join("keystore");
         let _ = fs::remove_dir_all(ketstore_dir);
-        let password = cli::prompt_password_confirm()?;
-        println!("Saving mnemonic...");
         let dir = self.key_store_path.join("mnemonic");
-        encrypt_mnemonic(
-            dir.as_path(),
-            &mut rng,
-            phrase.to_phrase().unwrap(),
-            password.as_bytes(),
-        )?;
+        encrypt_mnemonic(dir.as_path(), &mut rng, mnemonic, password.as_bytes())?;
         Ok(())
     }
 
-    pub fn show_mnemonic(&self) -> Result<(), Box<dyn Error>> {
-        let password = cli::prompt_password()?;
-        let term = console::Term::stderr();
+    pub fn show_mnemonic(&self, password: &str) -> Result<String, MnemonicError> {
         let dir = self.key_store_path.join("mnemonic");
-        term.write_line("Decrypting mnemonic...")?;
-        match decrypt_mnemonic(dir, password) {
-            Ok(mnemonic) => {
-                let _ = term.clear_last_lines(1);
-                term.write_line(&mnemonic)?;
-                Input::<String>::new()
-                    .allow_empty(true)
-                    .with_prompt("Press enter to continue")
-                    .interact_on(&term)?;
-            }
-            Err(error) => {
-                let _ = term.clear_last_lines(1);
-                return Err(Box::new(error));
-            }
-        }
-        let _ = term.clear_last_lines(2);
-        Ok(())
+        decrypt_mnemonic(dir, password)
     }
 
     //derive account from saved mnemonic
-    pub fn derive_account(&self) -> Result<(), Box<dyn Error>> {
-        let term = console::Term::stderr();
+    pub fn derive_account(&self, password: &str) -> Result<String, Box<dyn Error>> {
         let mut rng = rand::thread_rng();
         let dir = self.key_store_path.join("keystore");
         fs::create_dir_all(&dir)?;
@@ -166,80 +132,121 @@ impl MesonWallet {
             index += 1;
         }
         let mne_dir = self.key_store_path.join("mnemonic");
-        let password = cli::prompt_password()?;
-        term.write_line("Generating new account...")?;
-        match decrypt_mnemonic(mne_dir, password.as_str()) {
+        match decrypt_mnemonic(mne_dir, password) {
             Ok(mnemonic) => {
                 let eth_wallet = gen_keypair_from_mnemonic(&mnemonic, index)?;
                 let addr = "0x".to_owned() + &hex::encode(eth_wallet.address());
                 let secret = eth_wallet.signer().to_bytes();
                 eth_keystore::encrypt_key(dir, &mut rng, secret, password, Some(addr.as_str()))?;
-                let _ = term.clear_last_lines(1);
-                println!("Account {} created!", addr)
+                return Ok(addr);
             }
             Err(error) => {
                 return Err(Box::new(error));
             }
         }
-
-        Ok(())
     }
 
-    pub async fn send_transaction(&self) -> Result<String, Box<dyn Error>> {
-        let accounts = self.saved_accounts()?;
-        if accounts.len() == 0 {
-            return Err("Empty account list".into());
-        }
-        let selected_account = cli::select_account(&accounts)?;
-        let from_addr = Address::from_str(&selected_account.addr)?;
-        let term = console::Term::stderr();
-        let to_addr = Input::<String>::new()
-            .with_prompt("Send to")
-            .interact_on(&term)?;
-        let to_addr = Address::from_str(&to_addr)?;
-        let value = Input::<String>::new()
-            .with_prompt("Value in Wei")
-            .interact_on(&term)?;
-        let value = U256::from_dec_str(&value)?;
-        let chain_id = Input::<u64>::new()
-            .with_prompt("Chain ID")
-            .interact_on(&term)?;
+    pub async fn query_nonce(
+        &self,
+        addr: Address,
+        block: Option<BlockId>,
+        chain_id: u64,
+    ) -> Result<U256, Box<dyn Error>> {
         let ticker = self.ticker(chain_id)?;
+        let meson = MesonProvider::new(&self.meson_setting_path, ticker)?;
+        let meson_provider = Provider::new(meson);
+        let nonce = meson_provider.get_transaction_count(addr, block).await?;
+        Ok(nonce)
+    }
 
+    // create a lagacy transaction and query for gas info
+    pub async fn new_lagacy_transaction(
+        &self,
+        from: Address,
+        to: Address,
+        value: U256,
+        chain_id: u64,
+        nonce: Option<U256>,
+    ) -> Result<TypedTransaction, Box<dyn Error>> {
+        let ticker = self.ticker(chain_id)?;
+        let meson = MesonProvider::new(&self.meson_setting_path, ticker)?;
+        let meson_provider = Provider::new(meson);
+        let tx_req = TransactionRequest::new()
+            .from(from)
+            .to(to)
+            .value(value)
+            .chain_id(chain_id);
+        let mut tx = TypedTransaction::Legacy(tx_req);
+
+        // query nonce
+        match nonce {
+            Some(n) => tx.set_nonce(n),
+            None => {
+                let nonce = meson_provider.get_transaction_count(from, None).await?;
+                tx.set_nonce(nonce)
+            }
+        };
+        println!("pass nonce");
+        // query gas
+        meson_provider.fill_transaction(&mut tx, None).await?;
+
+        Ok(tx)
+    }
+
+    pub async fn new_eip1559_transaction(
+        &self,
+        from: Address,
+        to: Address,
+        value: U256,
+        chain_id: u64,
+        nonce: Option<U256>,
+    ) -> Result<TypedTransaction, Box<dyn Error>> {
+        let ticker = self.ticker(chain_id)?;
         let meson = MesonProvider::new(&self.meson_setting_path, ticker)?;
         let meson_provider = Provider::new(meson);
         let tx_req = Eip1559TransactionRequest::new()
-            .from(from_addr)
-            .to(to_addr)
+            .from(from)
+            .to(to)
             .value(value)
             .chain_id(chain_id);
+        let mut tx = TypedTransaction::Eip1559(tx_req);
 
         // query nonce
-        println!("Querying nonce info...");
-        let mut tx = TypedTransaction::Eip1559(tx_req);
-        let nonce = meson_provider
-            .get_transaction_count(from_addr, None)
-            .await?;
-        tx.set_nonce(nonce);
-        let _ = term.clear_last_lines(1);
+        match nonce {
+            Some(n) => tx.set_nonce(n),
+            None => {
+                let nonce = meson_provider.get_transaction_count(from, None).await?;
+                tx.set_nonce(nonce)
+            }
+        };
 
         // query gas
-        println!("Querying gas info...");
         meson_provider.fill_transaction(&mut tx, None).await?;
-        let _ = term.clear_last_lines(1);
 
-        // sign transaction
-        cli::confirm_tx(&tx)?;
-        let password = cli::prompt_password()?;
-        let wallet = Wallet::decrypt_keystore(&selected_account.path, password)?;
+        Ok(tx)
+    }
+
+    pub fn sign_transaction(
+        password: &str,
+        account: &Account,
+        tx: &TypedTransaction,
+    ) -> Result<Bytes, Box<dyn Error>> {
+        let wallet = Wallet::decrypt_keystore(&account.path, password)?;
         let signature = block_on(wallet.sign_transaction(&tx))?;
-        let tx = tx.rlp_signed(&signature);
+        let raw_tx = tx.rlp_signed(&signature);
+        Ok(raw_tx)
+    }
 
-        println!("Sending transaction...");
+    pub async fn send_transaction(
+        &self,
+        tx: Bytes,
+        chain_id: u64,
+    ) -> Result<String, Box<dyn Error>> {
+        let ticker = self.ticker(chain_id)?;
+        let meson = MesonProvider::new(&self.meson_setting_path, ticker)?;
+        let meson_provider = Provider::new(meson);
         let tx_hash = meson_provider.send_raw_transaction(tx).await?;
-        let _ = term.clear_last_lines(1);
-
-        println!("Tx hash: {}", tx_hash.to_string());
+        let tx_hash = "0x".to_string() + &hex::encode(tx_hash.as_bytes());
         Ok(tx_hash.to_string())
     }
 
@@ -273,46 +280,51 @@ impl MesonWallet {
         Ok(accounts)
     }
 
-    //import and save an account
-    pub fn import_account(&self) -> Result<(), Box<dyn Error>> {
-        let term = console::Term::stderr();
+    //show all imported accounts
+    pub fn imported_accounts(&self) -> Result<Vec<Account>, Box<dyn Error>> {
+        let import_dir = self.key_store_path.join("imported_keystore");
+        let mut accounts = Vec::new();
+        let mut files = Vec::new();
+        match import_dir.read_dir() {
+            Ok(entry) => files = entry.collect::<Vec<_>>(),
+            Err(_) => fs::create_dir_all(&import_dir)?,
+        }
+        for file in files {
+            match file {
+                Ok(account) => {
+                    if let Some(name) = account.file_name().to_str() {
+                        let saved = Account::new(name.to_string(), account.path());
+                        accounts.push(saved);
+                    } else {
+                        return Err("file error".into());
+                    }
+                }
+                Err(error) => return Err(Box::new(error)),
+            }
+        }
+        Ok(accounts)
+    }
+
+    // import and save an account
+    pub fn import_account(&self, sk: &str, password: &str) -> Result<String, Box<dyn Error>> {
         let mut rng = rand::thread_rng();
         let import_dir = self.key_store_path.join("imported_keystore");
         fs::create_dir_all(&import_dir)?;
-        let secret = Input::<String>::new()
-            .with_prompt("Secret Key")
-            .interact_on(&term)?;
-        let _ = term.clear_last_lines(1);
-        let password = cli::prompt_password()?;
-        let eth_wallet: Wallet<SigningKey> = secret.parse()?;
+        let eth_wallet: Wallet<SigningKey> = sk.parse()?;
         let addr = "0x".to_owned() + &hex::encode(eth_wallet.address());
         let secret = eth_wallet.signer().to_bytes();
         eth_keystore::encrypt_key(import_dir, &mut rng, secret, password, Some(addr.as_str()))?;
-        println!("Address {} imported!", addr);
-        Ok(())
+        Ok(addr)
     }
 
-    //import and save an mnemonic
-    pub fn import_mnemonic(&self) -> Result<(), Box<dyn Error>> {
-        let term = console::Term::stderr();
+    // import and save an mnemonic
+    pub fn import_mnemonic(&self, phrase: &str, password: &str) -> Result<(), Box<dyn Error>> {
         let mut rng = rand::thread_rng();
         let dir = self.key_store_path.join("mnemonic");
-        let phrase = Input::<String>::new()
-            .with_prompt("Mnemonic")
-            .interact_on(&term)?;
-        let _ = Mnemonic::<English>::new_from_phrase(&phrase)?;
-        let _ = term.clear_last_lines(3);
-        if !Confirm::new()
-            .with_prompt("All non-imported accounts will be cleared, continue?")
-            .interact_on(&term)?
-        {
-            return Err("Cancel".into());
-        }
-        let password = cli::prompt_password()?;
+        let _ = Mnemonic::<English>::new_from_phrase(phrase)?;
         let ketstore_dir = self.key_store_path.join("keystore");
         let _ = fs::remove_dir_all(ketstore_dir);
-        encrypt_mnemonic(dir.as_path(), &mut rng, phrase, password.as_bytes())?;
-        println!("Mnemonic imported!");
+        encrypt_mnemonic(dir.as_path(), &mut rng, &phrase, password.as_bytes())?;
         Ok(())
     }
 
@@ -323,39 +335,8 @@ impl MesonWallet {
         }
     }
 
-    pub fn delete_imported_account(&self) -> Result<(), Box<dyn Error>> {
-        let import_dir = self.key_store_path.join("imported_keystore");
-        let mut accounts = Vec::new();
-        let files;
-        match import_dir.read_dir() {
-            Ok(entry) => files = entry.collect::<Vec<_>>(),
-            Err(_) => return Err("Empty account list".into()),
-        }
-        for file in files {
-            match file {
-                Ok(account) => {
-                    if let Some(name) = account.file_name().to_str() {
-                        let saved = Account::new(name.to_string(), account.path());
-                        accounts.push(saved);
-                    } else {
-                        return Err(Box::new(MesonWalletError::MesonWalletError("".into())));
-                    }
-                }
-                Err(error) => return Err(Box::new(error)),
-            }
-        }
-        if accounts.len() == 0 {
-            return Err("Empty account list".into());
-        }
-        let selected_account = cli::select_account(&accounts)?;
-        let prompt = "Delete account ".to_string() + &selected_account.addr + "?";
-        if Confirm::new().with_prompt(prompt).interact()? {
-            fs::remove_file(&selected_account.path)?;
-            println!("Account deleted");
-        } else {
-            return Err("".into());
-        }
-
+    pub fn delete_account(&self, account: &Account) -> Result<(), Box<dyn Error>> {
+        fs::remove_file(&account.path)?;
         Ok(())
     }
 }
@@ -373,7 +354,7 @@ fn gen_keypair_from_mnemonic(phrase: &str, index: u32) -> Result<Wallet<SigningK
 fn encrypt_mnemonic<P, R, S>(
     dir: P,
     rng: &mut R,
-    mnemonic: String,
+    mnemonic: &str,
     password: S,
 ) -> Result<(), MnemonicError>
 where
@@ -397,9 +378,9 @@ where
     // Encrypt the private key using AES-128-CTR.
     let mut iv = vec![0u8; DEFAULT_IV_SIZE];
     rng.fill_bytes(iv.as_mut_slice());
-    let mut ciphertext = mnemonic.into_bytes();
+    let mut ciphertext: Vec<u8> = mnemonic.bytes().collect();
     let mut encrypter = Aes128Ctr::new((&key[..16]).into(), (&iv[..16]).into());
-    encrypter.apply_keystream(&mut ciphertext);
+    encrypter.apply_keystream(ciphertext.as_mut_slice());
 
     // Calculate the MAC.
     let mac = Keccak256::new()
@@ -466,7 +447,7 @@ where
     Ok(mnemonic)
 }
 
-pub fn _ping() {
+fn _ping() {
     let configFile =
         CString::new("./configuration/client.example.toml").expect("CString::new failed");
     unsafe {
@@ -505,7 +486,7 @@ pub fn _ping() {
         bindings::Shutdown();
     }
 }
-pub fn _ping_unblock() {
+fn _ping_unblock() {
     let configFile =
         CString::new("./configuration/client.example.toml").expect("CString::new failed");
     unsafe {
@@ -543,10 +524,10 @@ pub fn _ping_unblock() {
 #[cfg(test)]
 
 mod tests {
-    use crate::meson_util::meson_provider::MesonProvider;
-
     use super::*;
+    use crate::meson_util::meson_provider::MesonProvider;
     use serde_json::json;
+    use std::str::FromStr;
     use tempdir::TempDir;
     #[test]
     fn mnemonic_build() {
@@ -568,7 +549,7 @@ mod tests {
         encrypt_mnemonic(
             tmp_dir.path(),
             &mut rand::thread_rng(),
-            mnemonic1.clone(),
+            &mnemonic1,
             "15wefgsze",
         )
         .unwrap();
@@ -586,7 +567,7 @@ mod tests {
         encrypt_mnemonic(
             tmp_dir.path(),
             &mut rand::thread_rng(),
-            mnemonic1.clone(),
+            &mnemonic1,
             "15wefgsze",
         )
         .unwrap();
@@ -633,4 +614,13 @@ mod tests {
             .unwrap();
         println!("nonce:{:?}", nonce);
     }
+
+    // #[tokio::test]
+    // pub fn query_nonce_test() {
+    //     let toml_str = fs::read_to_string(wallet_config_path).unwrap();
+    //     let wallet_config: WalletConfig = toml::from_str(&toml_str).unwrap();
+    //     let meson_setting_path = wallet_config.meson_setting_path.clone();
+    //     let meson = Arc::new(MesonProvider::new(&meson_setting_path, "null").unwrap());
+    //     let wallet = MesonWallet::new(wallet_config, Arc::clone(&meson));
+    // }
 }

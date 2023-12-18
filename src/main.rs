@@ -57,14 +57,48 @@ fn main() {
 fn parse_eoa_input(input: u8, wallet: &MesonWallet) {
     if input == 0 {
         //import mnemonic
-        if let Err(_) = wallet.import_mnemonic() {
+        let term = console::Term::stderr();
+        let phrase = Input::<String>::new()
+            .with_prompt("Mnemonic")
+            .interact_on(&term)
+            .unwrap();
+        let _ = term.clear_last_lines(3);
+        if !Confirm::new()
+            .with_prompt("All non-imported accounts will be cleared, continue?")
+            .interact_on(&term)
+            .unwrap()
+        {
+            return;
+        }
+        let password = cli::prompt_password().unwrap();
+        if let Err(_) = wallet.import_mnemonic(&phrase, &password) {
             println!("Unable to import mnemonic");
         }
     } else if input == 1 {
         //Create new mnemonic
-
         println!("Creating mnemonic...");
-        match wallet.new_mnemonic() {
+        let mnemonic = match MesonWallet::gen_mnemonic() {
+            Ok(m) => m,
+            Err(_) => {
+                println!("Unabel to create mnemonic, please try again!");
+                return;
+            }
+        };
+        let term = console::Term::stderr();
+        let _ = term.write_line(&mnemonic);
+        if Confirm::new()
+            .with_prompt("All non-imported accounts will be cleared, continue?")
+            .interact_on(&term)
+            .unwrap()
+        {
+            let _ = term.clear_last_lines(2);
+        } else {
+            let _ = term.clear_last_lines(2);
+            println!("Cancel");
+            return;
+        }
+        let password = cli::prompt_password_confirm().unwrap();
+        match wallet.save_mnemonic(&mnemonic, &password) {
             Ok(_) => {
                 println!("Success!")
             }
@@ -74,28 +108,137 @@ fn parse_eoa_input(input: u8, wallet: &MesonWallet) {
         };
     } else if input == 2 {
         //Import account
-        if let Err(_) = wallet.import_account() {
-            println!("Unable to import account");
+        let term = console::Term::stderr();
+        let sk = Input::<String>::new()
+            .with_prompt("Private Key")
+            .interact_on(&term)
+            .unwrap();
+        let _ = term.clear_last_lines(1);
+        let password = cli::prompt_password().unwrap();
+        match wallet.import_account(&sk, &password) {
+            Ok(addr) => println!("Address {} imported!", addr),
+            Err(_) => println!("Unable to import account"),
         }
     } else if input == 3 {
         //Create account
-        if let Err(_) = wallet.derive_account() {
-            println!("Unable to create account");
-        };
+        let term = console::Term::stderr();
+        let password = cli::prompt_password().unwrap();
+        let _ = term.write_line("Generating new account...");
+        match wallet.derive_account(&password) {
+            Ok(addr) => println!("Account {} created!", addr),
+            Err(_) => println!("Unable to create account"),
+        }
     } else if input == 4 {
         //Send transaction
         let rt = Runtime::new().unwrap();
-        if let Err(error) = rt.block_on(wallet.send_transaction()) {
-            println!("{}", error);
+        let accounts = match wallet.saved_accounts() {
+            Ok(accounts) => accounts,
+            Err(_) => {
+                println!("Unable to get saved accounts");
+                return;
+            }
+        };
+        if accounts.len() == 0 {
+            println!("Empty account list");
+            return;
         }
+        let selected_account = match cli::select_account(&accounts) {
+            Ok(a) => a,
+            Err(_) => return,
+        };
+        let from = Address::from_str(&selected_account.addr).unwrap();
+        let term = console::Term::stderr();
+        let to = Input::<String>::new()
+            .with_prompt("Send to")
+            .interact_on(&term)
+            .unwrap();
+        let to = Address::from_str(&to).unwrap();
+        let value = Input::<String>::new()
+            .with_prompt("Value in Wei")
+            .interact_on(&term)
+            .unwrap();
+        let value = U256::from_dec_str(&value).unwrap();
+        let chain_id = Input::<u64>::new()
+            .with_prompt("Chain ID")
+            .interact_on(&term)
+            .unwrap();
+
+        println!("Querying gas info...");
+        // let ticker = wallet.ticker(chain_id).unwrap();
+        // let meson_provider = MesonProvider::new(&wallet.meson_setting_path, ticker)?;
+        let tx = match rt.block_on(wallet.new_lagacy_transaction(from, to, value, chain_id, None)) {
+            Ok(tx) => tx,
+            Err(e) => {
+                println!("{}", e);
+                return;
+            }
+        };
+
+        cli::confirm_tx(&tx).unwrap();
+        let password = cli::prompt_password().unwrap();
+        println!("Signing transaction...");
+        let raw_tx = match MesonWallet::sign_transaction(&password, selected_account, &tx) {
+            Ok(raw_tx) => raw_tx,
+            Err(e) => {
+                println!("{}", e);
+                return;
+            }
+        };
+
+        println!("Sending transaction...");
+        let tx_hash = match rt.block_on(wallet.send_transaction(raw_tx, chain_id)) {
+            Ok(hash) => hash,
+            Err(e) => {
+                println!("{}", e);
+                return;
+            }
+        };
+
+        println!("Tx hash: {}", tx_hash);
     } else if input == 5 {
         //Show mnemonic
-        if let Err(_) = wallet.show_mnemonic() {
-            println!("Unable to decrypt mnemonic");
+        let password = cli::prompt_password().unwrap();
+        let term = console::Term::stderr();
+        _ = term.write_line("Decrypting mnemonic...");
+        match wallet.show_mnemonic(&password) {
+            Ok(mnemonic) => {
+                _ = term.clear_last_lines(1);
+                _ = term.write_line(&mnemonic);
+                _ = Input::<String>::new()
+                    .allow_empty(true)
+                    .with_prompt("Press enter to continue")
+                    .interact_on(&term);
+            }
+            Err(_) => {
+                _ = term.clear_last_lines(1);
+                println!("Unable to decrypt mnemonic");
+            }
         }
+        _ = term.clear_last_lines(2);
     } else if input == 6 {
-        if let Err(error) = wallet.delete_imported_account() {
-            println!("{}", error);
+        let accounts = match wallet.imported_accounts() {
+            Ok(accounts) => accounts,
+            Err(_) => {
+                println!("Unable to get saved accounts");
+                return;
+            }
+        };
+        if accounts.len() == 0 {
+            println!("Empty account list");
+            return;
+        }
+        let selected_account = match cli::select_account(&accounts) {
+            Ok(a) => a,
+            Err(_) => return,
+        };
+        let prompt = "Delete account ".to_string() + &selected_account.addr + "?";
+        if Confirm::new().with_prompt(prompt).interact().unwrap() {
+            if let Err(error) = wallet.delete_account(selected_account) {
+                println!("{}", error);
+            }
+            println!("Account deleted");
+        } else {
+            return;
         }
     }
 }

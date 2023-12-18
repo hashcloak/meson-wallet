@@ -18,8 +18,8 @@ fn main() {
         .unwrap();
 
     // only for cargo run, shoud export the path of libclient_bindings.so if run binary
-    println!("cargo:rustc-env=LD_LIBRARY_PATH={}", out_dir);
-    println!("cargo:rustc-env=DYLD_FALLBACK_LIBRARY_PATH={}", out_dir);
+    // println!("cargo:rustc-env=LD_LIBRARY_PATH={}", out_dir);
+    // println!("cargo:rustc-env=DYLD_FALLBACK_LIBRARY_PATH={}", out_dir);
 
     // Tell cargo to look for shared libraries in the specified directory
     println!("cargo:rustc-link-search={}", out_dir);

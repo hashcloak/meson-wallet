@@ -1,10 +1,17 @@
 use ethers::prelude::ProviderError;
+use ethers::signers::coins_bip39::MnemonicError as MnError;
 use thiserror::Error;
 
 //todo: clean up error type after DirectPost update
 
 #[derive(Error, Debug)]
 pub enum MnemonicError {
+    #[error("{source}")]
+    MnemonicError {
+        #[from]
+        source: MnError,
+    },
+
     #[error("Mac Mismatch")]
     MacMismatch,
 

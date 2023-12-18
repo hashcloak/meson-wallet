@@ -43,6 +43,7 @@ impl<'a> Drop for MesonProvider<'a> {
 }
 
 impl<'a> MesonProvider<'a> {
+    // initialize without dropping the previous instance will cause error
     pub fn new(meson_setting_path: &'a Path, ticker: &'a str) -> Result<Self, MesonError> {
         meson_register(
             meson_setting_path
