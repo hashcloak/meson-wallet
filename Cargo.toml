@@ -11,7 +11,7 @@ build = "./src/build.rs"
 ethers = { version = "1.0.2", features = ["rustls"] }
 futures = "0.3"
 ctr = "0.9.1"
-scrypt = "0.8.1"
+scrypt = "0.11.0"
 sha3 = "0.10.1"
 rand = "0.8.4"
 aes = "0.8.1"

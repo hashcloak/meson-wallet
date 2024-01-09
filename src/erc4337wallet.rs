@@ -21,7 +21,7 @@ use toml::Value;
 // constant used in AES
 const DEFAULT_KEY_SIZE: usize = 48usize;
 const DEFAULT_IV_SIZE: usize = 16usize;
-const DEFAULT_KDF_PARAMS_DKLEN: u8 = 48u8;
+const DEFAULT_KDF_PARAMS_DKLEN: usize = 48usize;
 const DEFAULT_KDF_PARAMS_LOG_N: u8 = 13u8;
 const DEFAULT_KDF_PARAMS_R: u32 = 8u32;
 const DEFAULT_KDF_PARAMS_P: u32 = 1u32;
@@ -363,11 +363,12 @@ impl Erc4337Wallet {
         rng.fill_bytes(salt.as_mut_slice());
 
         // Key Derivation with scrypt.
-        let mut key = vec![0u8; DEFAULT_KDF_PARAMS_DKLEN as usize];
+        let mut key = vec![0u8; DEFAULT_KDF_PARAMS_DKLEN];
         let scrypt_params = ScryptParams::new(
             DEFAULT_KDF_PARAMS_LOG_N,
             DEFAULT_KDF_PARAMS_R,
             DEFAULT_KDF_PARAMS_P,
+            DEFAULT_KEY_SIZE as usize,
         )
         .unwrap();
         if let Err(_) = scrypt(password.as_ref(), &salt, &scrypt_params, key.as_mut_slice()) {
@@ -416,11 +417,12 @@ impl Erc4337Wallet {
         let iv = Base64::decode_vec(&json_cipher.iv)?;
 
         //Derive the key
-        let mut key = vec![0u8; DEFAULT_KDF_PARAMS_DKLEN as usize];
+        let mut key = vec![0u8; DEFAULT_KDF_PARAMS_DKLEN];
         let scrypt_params = ScryptParams::new(
             DEFAULT_KDF_PARAMS_LOG_N,
             DEFAULT_KDF_PARAMS_R,
             DEFAULT_KDF_PARAMS_P,
+            DEFAULT_KEY_SIZE as usize,
         )
         .unwrap();
         if let Err(_) = scrypt(password.as_ref(), &salt, &scrypt_params, key.as_mut_slice()) {
