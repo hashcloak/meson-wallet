@@ -1,0 +1,21 @@
+supported_list = ["Simple Account","BLS"]
+
+#Account factory/implementation address for bls account on different chain
+[bls]
+  [bls.5]
+    BLS_ACCOUNT_FACTORY_ADDRESS = ""
+    BLS_ACCOUNT_IMPLEMENTATION = ""
+  #test local chain
+  [bls.12345]
+    BLS_ACCOUNT_FACTORY_ADDRESS = "0x112a61EE7ba1461f287508f84f0FE994759354f7"
+    BLS_ACCOUNT_IMPLEMENTATION = "0xA44e03a76052d40bfCDfc0f670e185f84EB31CD8"
+
+#Account factory/implementation address for simple account on different chain
+[simple_account]
+  [simple_account.5]
+    ACCOUNT_FACTORY_ADDRESS = ""
+    ACCOUNT_IMPLEMENTATION = "" 
+  #test local chain
+  [simple_account.12345]
+    ACCOUNT_FACTORY_ADDRESS = "0x565a797Bd8614C2Fdc13d789BA7D2Af40BA175Fd"
+    ACCOUNT_IMPLEMENTATION = "0x7395CF243c6e5750fDd8387deD6889B035536ECE" 

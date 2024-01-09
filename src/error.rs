@@ -1,7 +1,17 @@
+use ethers::prelude::ProviderError;
+use ethers::signers::coins_bip39::MnemonicError as MnError;
 use thiserror::Error;
+
+//todo: clean up error type after DirectPost update
 
 #[derive(Error, Debug)]
 pub enum MnemonicError {
+    #[error("{source}")]
+    MnemonicError {
+        #[from]
+        source: MnError,
+    },
+
     #[error("Mac Mismatch")]
     MacMismatch,
 
@@ -61,10 +71,48 @@ impl From<base64ct::Error> for MnemonicError {
 pub enum MesonError {
     #[error("MesonError: {0}")]
     MesonError(String),
+    #[error("RPCError: {0}")]
+    RPCError(String),
+    #[error("SerdeError: {0}")]
+    SerdeError(String),
+}
+
+impl From<serde_json::Error> for MesonError {
+    fn from(e: serde_json::Error) -> Self {
+        Self::SerdeError(e.to_string())
+    }
+}
+impl From<MesonError> for ProviderError {
+    fn from(src: MesonError) -> Self {
+        ProviderError::JsonRpcClientError(Box::new(src))
+    }
 }
 
 #[derive(Error, Debug)]
 pub enum MesonWalletError {
-    #[error("MesonWalletError")]
+    #[error("MesonWalletError: {0}")]
     MesonWalletError(String),
+    #[error("SigningError: {0}")]
+    SigningError(String),
+    #[error("DecryptError")]
+    DecryptError,
+    #[error("EncryptError")]
+    EncryptError,
+    #[error("IOError: {source}")]
+    IOError {
+        #[from]
+        source: std::io::Error,
+    },
+    #[error("SerdeError: {source}")]
+    SerdeError {
+        #[from]
+        source: serde_json::Error,
+    },
+    #[error("ConfigFileError: {0}")]
+    ConfigFileError(String),
+    #[error("Base64 error {source}")]
+    Base64Error {
+        #[from]
+        source: base64ct::Error,
+    },
 }

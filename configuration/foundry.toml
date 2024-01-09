@@ -1,0 +1,9 @@
+[profile.default]
+src = '../src/contracts'
+out = '../out'
+script = '../src/contracts/script'
+test = '../src/contracts/test'
+libs = ['../foundry-lib']
+remappings = ['forge-std/=../foundry-lib/forge-std/src/','openzeppelin-contracts/=../foundry-lib/openzeppelin-contracts/']
+
+# See more config options https://github.com/foundry-rs/foundry/tree/master/config

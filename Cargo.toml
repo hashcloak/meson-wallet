@@ -2,15 +2,16 @@
 name = "meson-wallet"
 version = "0.1.0"
 edition = "2021"
+build = "./src/build.rs"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 
-ethers = { git = "https://github.com/gakonst/ethers-rs" }
+ethers = { version = "1.0.2", features = ["rustls"] }
 futures = "0.3"
 ctr = "0.9.1"
-scrypt = "0.8.1"
+scrypt = "0.10.0"
 sha3 = "0.10.1"
 rand = "0.8.4"
 aes = "0.8.1"
@@ -19,10 +20,28 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = {version = "1.0", features = ["arbitrary_precision"]} 
 tempdir = "0.3"
 thiserror = "1.0"
-eth-keystore = "0.4.1"
+eth-keystore = "0.5.0"
 toml = "0.5"
 rpassword = "6.0"
 dialoguer = "0.10"
+num-bigint = "0.4.3"
+num-integer = "0.1"
+tokio = { version = "1.18.2", features = ["macros"] }
+babyjubjub-rs = "0.0.10"
+ff_ce = "0.11"
+mimc-sponge-rs = { git = "https://github.com/tzilkha/mimc-sponge-rs" }
+ark-circom = { git = "https://github.com/LYC386/circom-compat" }
+ark-bn254 = { version = "0.4.0" }
+ark-groth16 = { version = "0.4.0", default-features = false, features = ["parallel"] }
+tempfile = "3.5.0"
+ethers-core = "1.0.2"
+bitvec = "1"
+blake-hash = "0.4.1"
+ark-snark = "0.4.0"
+ark-serialize = "0.4.2"
+ark-ec = "0.4.2"
+ark-ff = "0.4.2"
+async-trait = "0.1"
 
 [build-dependencies]
 bindgen = "0.53.1"

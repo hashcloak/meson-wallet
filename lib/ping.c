@@ -18,7 +18,7 @@ int main(int argc, char *argv[])
   printf("packet_len: %zu \n", r.r1);
   for (i = 0; i < r.r1; i++)
   {
-    printf("%c", r.r0[i]);
+    printf("%c", r.r0);
   }
   Shutdown();
 

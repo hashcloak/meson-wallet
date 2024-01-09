@@ -1,0 +1,15 @@
+key_store_path = "./keystore"
+meson_setting_path = "./configuration/client.example.toml"
+supported_accounts_path = "./configuration/accounts.toml"
+entrypoint = "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789"
+
+[chain]
+  [chain.5]
+    ticker = "gor"
+    endpoint = "https://goerli.infura.io/v3/9aa3d95b3bc440fa88ea12eaa4456161"
+  [chain.4]
+    ticker = "rin"
+    endpoint = "https://rinkeby.infura.io/v3/9aa3d95b3bc440fa88ea12eaa4456161"
+  [chain.42]
+    ticker = "kov"
+    endpoint = "https://kovan.infura.io/v3/9aa3d95b3bc440fa88ea12eaa4456161"

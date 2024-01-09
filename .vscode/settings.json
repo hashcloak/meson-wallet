@@ -1,0 +1,11 @@
+{
+    "rust-analyzer.linkedProjects": [
+        "./Cargo.toml",
+    ],
+    "solidity.compileUsingRemoteVersion": "v0.8.19+commit.7dd6d404",
+    "solidity.packageDefaultDependenciesContractsDirectory": "src/contracts",
+    "solidity.packageDefaultDependenciesDirectory": "foundry-lib",
+    "files.associations": {
+        "libclient_bindings.h": "c"
+    }
+}
