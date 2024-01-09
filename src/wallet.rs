@@ -372,7 +372,6 @@ where
         DEFAULT_KDF_PARAMS_LOG_N,
         DEFAULT_KDF_PARAMS_R,
         DEFAULT_KDF_PARAMS_P,
-        DEFAULT_KEY_SIZE as usize,
     )?;
     scrypt(password.as_ref(), &salt, &scrypt_params, key.as_mut_slice())?;
 
@@ -427,7 +426,6 @@ where
         DEFAULT_KDF_PARAMS_LOG_N,
         DEFAULT_KDF_PARAMS_R,
         DEFAULT_KDF_PARAMS_P,
-        DEFAULT_KEY_SIZE as usize,
     )?;
     scrypt(password.as_ref(), &salt, &scrypt_params, key.as_mut_slice())?;
 
